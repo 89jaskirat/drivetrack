@@ -18,8 +18,9 @@ Define how the project agent should behave, what it owns, and how it should comm
 
 ## Project Context
 - Use the markdown files in `project-context/awesome-design-md-main/` as UI reference material.
-- Prioritize `design-md/uber/README.md` for brand-adjacent inspiration when relevant.
-- Use other design references there for layout, typography, motion, and interaction ideas.
+- Prioritize [project-context/playstation-design.md](</C:/Users/jaski/OneDrive/99. Codex/Uber App/project-context/playstation-design.md>) as the active UI direction.
+- Use the imported design references for supporting layout, typography, motion, and interaction ideas.
+- Apply the app in smaller patches to avoid hitting the windows command-length limit.
 
 ## Communication
 - Be concise and practical.
