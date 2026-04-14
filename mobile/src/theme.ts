@@ -1,0 +1,40 @@
+export const appTheme = {
+  colors: {
+    playstationBlue: '#0070cc',
+    playstationCyan: '#1eaedb',
+    consoleBlack: '#000000',
+    shadowBlack: '#121314',
+    paperWhite: '#ffffff',
+    iceMist: '#f5f7fa',
+    displayInk: '#000000',
+    deepCharcoal: '#1f1f1f',
+    bodyGray: '#6b6b6b',
+    muteGray: '#cccccc',
+    inverseWhite: '#ffffff',
+    darkLinkBlue: '#53b1ff',
+    commerceOrange: '#d53b00',
+    warningRed: '#c81b3a',
+  },
+  radii: {
+    input: 3,
+    media: 12,
+    card: 24,
+    button: 999,
+  },
+  shadows: {
+    light: {
+      shadowColor: '#000000',
+      shadowOpacity: 0.06,
+      shadowRadius: 9,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 2,
+    },
+    medium: {
+      shadowColor: '#000000',
+      shadowOpacity: 0.08,
+      shadowRadius: 9,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 3,
+    },
+  },
+};
