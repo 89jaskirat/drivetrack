@@ -39,4 +39,8 @@ yarn-error.*
 /android
 
 # Legacy subdirectory (moved to root)
-mobile/
+mobile
+
+# Untracked context files
+project-context/
+.claude/
