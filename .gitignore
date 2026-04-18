@@ -44,3 +44,4 @@ mobile
 # Untracked context files
 project-context/
 .claude/
+start-web.ps1
