@@ -25,7 +25,7 @@ export function CarouselRail(props: GasRailProps | CommunityRailProps) {
               <Text style={styles.slideBody}>{item.distanceKm.toFixed(1)} km away</Text>
               <Text style={styles.slideBody}>{item.address}</Text>
               <ActionButton
-                label="Open in Google Maps"
+                label="Open in Maps"
                 onPress={() =>
                   Linking.openURL(
                     `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.address)}`,
@@ -41,7 +41,7 @@ export function CarouselRail(props: GasRailProps | CommunityRailProps) {
               <Text style={styles.slideBody} numberOfLines={4}>
                 {item.body}
               </Text>
-              <Text style={styles.linkText}>Open thread</Text>
+              <Text style={styles.linkText}>Open thread →</Text>
             </Pressable>
           ))}
     </ScrollView>
@@ -50,19 +50,20 @@ export function CarouselRail(props: GasRailProps | CommunityRailProps) {
 
 const styles = StyleSheet.create({
   rail: {
-    gap: 12,
+    gap: appTheme.spacing.md,
   },
   slide: {
-    width: 290,
-    backgroundColor: appTheme.colors.iceMist,
+    width: 260,
+    backgroundColor: appTheme.surface.input,
     borderRadius: appTheme.radii.card,
-    padding: 16,
-    gap: 8,
+    padding: appTheme.spacing.base,
+    gap: appTheme.spacing.sm,
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
   },
   slideTitle: {
-    color: appTheme.colors.displayInk,
-    fontSize: 20,
-    fontWeight: '300',
+    color: appTheme.colors.inverseWhite,
+    ...appTheme.typography.displayS,
   },
   slideValue: {
     color: appTheme.colors.playstationBlue,
@@ -70,12 +71,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   slideBody: {
-    color: appTheme.colors.bodyGray,
+    color: appTheme.colors.secondaryText,
+    ...appTheme.typography.body,
     lineHeight: 20,
   },
   linkText: {
     color: appTheme.colors.playstationBlue,
     fontWeight: '700',
-    marginTop: 8,
+    marginTop: appTheme.spacing.sm,
   },
 });

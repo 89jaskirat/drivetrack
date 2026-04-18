@@ -1,184 +1,280 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ForumComment, ForumPost } from '../types';
 import { appTheme } from '../theme';
-import { ComponentLabel } from './ComponentLabel';
 
+// ─── RedditThreadCard ──────────────────────────────────────────────────────────
 export function RedditThreadCard({
   post,
   onVotePost,
   onVoteComment,
+  onReplyToPost,
+  onReplyToComment,
 }: {
   post: ForumPost;
   onVotePost: (delta: number) => void;
   onVoteComment: (commentId: string, delta: number, replyId?: string) => void;
+  onReplyToPost?: () => void;
+  onReplyToComment?: (commentId: string) => void;
 }) {
   return (
     <View style={styles.card}>
-      <ComponentLabel name="RedditThreadCard" tone="light" />
+      {/* Post row */}
       <View style={styles.row}>
-        <VoteColumn votes={post.votes} onUpvote={() => onVotePost(1)} onDownvote={() => onVotePost(-1)} />
+        <VoteCol votes={post.votes} onUp={() => onVotePost(1)} onDown={() => onVotePost(-1)} />
         <View style={styles.content}>
           <Text style={styles.meta}>u/{post.author}</Text>
           <Text style={styles.title}>{post.title}</Text>
-          <Text style={styles.body}>{post.body}</Text>
-          <Text style={styles.tags}>{post.tags.map((tag) => `#${tag}`).join('  ')}</Text>
-          <View style={styles.commentStack}>
-            {post.comments.map((comment) => (
-              <CommentNode key={comment.id} comment={comment} depth={0} onVoteComment={onVoteComment} />
-            ))}
+          {!!post.body && <Text style={styles.body} numberOfLines={4}>{post.body}</Text>}
+          {!!post.link && <Text style={styles.link}>🔗 {post.link}</Text>}
+          {!!post.imageUri && (
+            <View style={styles.imgPlaceholder}>
+              <Text style={styles.imgText}>📷 {post.imageUri}</Text>
+            </View>
+          )}
+          {post.tags.length > 0 && (
+            <Text style={styles.tags}>{post.tags.map((t) => `#${t}`).join('  ')}</Text>
+          )}
+          <View style={styles.actionRow}>
+            <Pressable onPress={onReplyToPost} style={styles.actionBtn}>
+              <Text style={styles.actionText}>💬 {post.comments.length} comments</Text>
+            </Pressable>
           </View>
         </View>
       </View>
+
+      {/* Comment thread */}
+      {post.comments.length > 0 && (
+        <View style={styles.thread}>
+          {post.comments.map((c) => (
+            <CommentNode
+              key={c.id}
+              comment={c}
+              depth={0}
+              postId={post.id}
+              onVoteComment={onVoteComment}
+              onReplyToComment={onReplyToComment}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
+
+// ─── CommentNode ───────────────────────────────────────────────────────────────
+const MAX_DEPTH = 6;
+const DEPTH_COLORS = [
+  appTheme.colors.playstationBlue,
+  '#e67e22',
+  '#2ecc71',
+  '#9b59b6',
+  '#e74c3c',
+  '#1abc9c',
+];
 
 function CommentNode({
   comment,
   depth,
+  postId,
   onVoteComment,
+  onReplyToComment,
 }: {
   comment: ForumComment;
   depth: number;
+  postId: string;
   onVoteComment: (commentId: string, delta: number, replyId?: string) => void;
+  onReplyToComment?: (commentId: string) => void;
 }) {
+  const borderColor = DEPTH_COLORS[depth % DEPTH_COLORS.length];
+
   return (
-    <View style={[styles.commentNode, depth > 0 && styles.replyNode]}>
+    <View style={[styles.commentNode, { borderLeftColor: borderColor }]}>
       <View style={styles.row}>
-        <VoteColumn
+        <VoteCol
           votes={comment.votes}
           compact
-          onUpvote={() => onVoteComment(comment.id, 1)}
-          onDownvote={() => onVoteComment(comment.id, -1)}
+          onUp={() => onVoteComment(comment.id, 1)}
+          onDown={() => onVoteComment(comment.id, -1)}
         />
         <View style={styles.content}>
-          <Text style={styles.meta}>u/{comment.author}</Text>
+          <Text style={styles.commentMeta}>u/{comment.author}</Text>
           <Text style={styles.commentBody}>{comment.body}</Text>
-          {comment.replies?.map((reply) => (
-            <View key={reply.id} style={styles.replyWrap}>
-              <View style={styles.row}>
-                <VoteColumn
-                  votes={reply.votes}
-                  compact
-                  onUpvote={() => onVoteComment(comment.id, 1, reply.id)}
-                  onDownvote={() => onVoteComment(comment.id, -1, reply.id)}
-                />
-                <View style={styles.content}>
-                  <Text style={styles.meta}>u/{reply.author}</Text>
-                  <Text style={styles.commentBody}>{reply.body}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
+          <Pressable
+            onPress={() => onReplyToComment?.(comment.id)}
+            style={styles.replyBtn}
+          >
+            <Text style={styles.replyBtnText}>↩ Reply</Text>
+          </Pressable>
         </View>
       </View>
+
+      {/* Recursive replies */}
+      {comment.replies && comment.replies.length > 0 && depth < MAX_DEPTH && (
+        <View style={styles.replies}>
+          {comment.replies.map((reply) => (
+            <CommentNode
+              key={reply.id}
+              comment={reply}
+              depth={depth + 1}
+              postId={postId}
+              onVoteComment={onVoteComment}
+              onReplyToComment={onReplyToComment}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
-function VoteColumn({
+// ─── VoteCol ───────────────────────────────────────────────────────────────────
+function VoteCol({
   votes,
-  onUpvote,
-  onDownvote,
+  onUp,
+  onDown,
   compact,
 }: {
   votes: number;
-  onUpvote: () => void;
-  onDownvote: () => void;
+  onUp: () => void;
+  onDown: () => void;
   compact?: boolean;
 }) {
   return (
-    <View style={[styles.voteColumn, compact && styles.voteColumnCompact]}>
-      <Pressable onPress={onUpvote} style={styles.voteButton}>
-        <Text style={styles.voteText}>+</Text>
+    <View style={[styles.voteCol, compact && styles.voteColCompact]}>
+      <Pressable onPress={onUp} hitSlop={6}>
+        <Text style={styles.voteArrow}>▲</Text>
       </Pressable>
-      <Text style={styles.voteCount}>{votes}</Text>
-      <Pressable onPress={onDownvote} style={styles.voteButton}>
-        <Text style={styles.voteText}>-</Text>
+      <Text style={[styles.voteCount, compact && styles.voteCountCompact]}>{votes}</Text>
+      <Pressable onPress={onDown} hitSlop={6}>
+        <Text style={styles.voteArrow}>▼</Text>
       </Pressable>
     </View>
   );
 }
 
+// ─── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: appTheme.colors.paperWhite,
+    backgroundColor: appTheme.surface.card,
     borderRadius: appTheme.radii.card,
-    padding: 18,
-    marginTop: 16,
-    ...appTheme.shadows.light,
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
+    marginTop: appTheme.spacing.sm,
+    overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    padding: appTheme.spacing.sm,
+    gap: appTheme.spacing.sm,
   },
-  voteColumn: {
-    width: 42,
+  voteCol: {
+    width: 28,
     alignItems: 'center',
-    gap: 6,
+    gap: 3,
+    paddingTop: 2,
   },
-  voteColumnCompact: {
-    width: 34,
+  voteColCompact: {
+    width: 22,
   },
-  voteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: appTheme.colors.playstationBlue,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voteText: {
-    color: appTheme.colors.inverseWhite,
-    fontSize: 18,
-    fontWeight: '700',
+  voteArrow: {
+    color: appTheme.colors.bodyGray,
+    fontSize: 10,
+    lineHeight: 14,
   },
   voteCount: {
     color: appTheme.colors.playstationBlue,
+    fontSize: 12,
     fontWeight: '700',
+    lineHeight: 14,
+  },
+  voteCountCompact: {
+    fontSize: 11,
   },
   content: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   meta: {
     color: appTheme.colors.bodyGray,
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 14,
   },
   title: {
-    color: appTheme.colors.displayInk,
-    fontSize: 24,
-    fontWeight: '300',
+    color: appTheme.colors.inverseWhite,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 19,
   },
   body: {
-    color: appTheme.colors.deepCharcoal,
-    lineHeight: 21,
+    color: appTheme.colors.secondaryText,
+    fontSize: 13,
+    lineHeight: 18,
   },
   tags: {
     color: appTheme.colors.playstationBlue,
+    fontSize: 11,
     fontWeight: '600',
+  },
+  link: {
+    color: appTheme.colors.darkLinkBlue,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  imgPlaceholder: {
+    backgroundColor: appTheme.surface.input,
+    borderRadius: 6,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
+  },
+  imgText: {
+    color: appTheme.colors.bodyGray,
+    fontSize: 11,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: appTheme.spacing.sm,
     marginTop: 2,
   },
-  commentStack: {
-    gap: 12,
-    marginTop: 8,
+  actionBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    backgroundColor: appTheme.surface.input,
+  },
+  actionText: {
+    color: appTheme.colors.bodyGray,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  thread: {
+    borderTopWidth: 1,
+    borderTopColor: appTheme.surface.border,
   },
   commentNode: {
     borderLeftWidth: 2,
-    borderLeftColor: appTheme.colors.playstationBlue,
-    paddingLeft: 12,
+    marginLeft: appTheme.spacing.sm,
   },
-  replyNode: {
-    marginLeft: 8,
+  replies: {
+    marginLeft: 4,
+  },
+  commentMeta: {
+    color: appTheme.colors.bodyGray,
+    fontSize: 11,
+    lineHeight: 14,
   },
   commentBody: {
-    color: appTheme.colors.deepCharcoal,
-    lineHeight: 20,
+    color: appTheme.colors.secondaryText,
+    fontSize: 13,
+    lineHeight: 18,
   },
-  replyWrap: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: appTheme.colors.muteGray,
+  replyBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 2,
+  },
+  replyBtnText: {
+    color: appTheme.colors.bodyGray,
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

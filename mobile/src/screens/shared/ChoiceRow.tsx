@@ -17,7 +17,11 @@ export function ChoiceRow({
       <Text style={styles.label}>{label}</Text>
       <View style={styles.row}>
         {options.map((option) => (
-          <Pressable key={option} style={[styles.choice, value === option && styles.choiceActive]} onPress={() => onChange(option)}>
+          <Pressable
+            key={option}
+            style={[styles.choice, value === option && styles.choiceActive]}
+            onPress={() => onChange(option)}
+          >
             <Text style={[styles.choiceText, value === option && styles.choiceTextActive]}>{option}</Text>
           </Pressable>
         ))}
@@ -28,30 +32,35 @@ export function ChoiceRow({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 8,
+    gap: appTheme.spacing.sm,
   },
   label: {
-    color: appTheme.colors.deepCharcoal,
-    fontWeight: '600',
-    fontSize: 13,
+    color: appTheme.colors.secondaryText,
+    ...appTheme.typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: appTheme.spacing.sm,
   },
   choice: {
-    paddingHorizontal: 12,
+    paddingHorizontal: appTheme.spacing.md,
     paddingVertical: 10,
     borderRadius: appTheme.radii.button,
-    backgroundColor: appTheme.colors.iceMist,
+    backgroundColor: appTheme.surface.input,
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
   },
   choiceActive: {
     backgroundColor: appTheme.colors.playstationBlue,
+    borderColor: appTheme.colors.playstationBlue,
   },
   choiceText: {
-    color: appTheme.colors.deepCharcoal,
+    color: appTheme.colors.secondaryText,
     fontWeight: '500',
+    fontSize: 13,
   },
   choiceTextActive: {
     color: appTheme.colors.inverseWhite,

@@ -24,12 +24,12 @@ export function ScreenFrame({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: appTheme.colors.consoleBlack,
+    backgroundColor: appTheme.surface.screen,
   },
   container: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingHorizontal: appTheme.spacing.base,
+    paddingTop: appTheme.spacing.sm,
   },
   content: {
     paddingBottom: 120,

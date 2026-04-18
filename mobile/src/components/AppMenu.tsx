@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { appTheme } from '../theme';
-import { ComponentLabel } from './ComponentLabel';
 
 export function AppMenu({
   open,
@@ -19,18 +18,31 @@ export function AppMenu({
     <View style={styles.overlay}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={styles.drawer}>
-        <ComponentLabel name="BurgerMenuDrawer" />
         <Text style={styles.title}>Menu</Text>
-        <Pressable style={styles.item} onPress={onProfilePress}>
-          <Text style={styles.itemTitle}>Profile</Text>
-          <Text style={styles.itemBody}>Name, phone, email, and account details</Text>
-        </Pressable>
-        <Pressable style={styles.item} onPress={onSettingsPress}>
-          <Text style={styles.itemTitle}>Settings</Text>
-          <Text style={styles.itemBody}>Units, GPS consent, and local preferences</Text>
-        </Pressable>
+        <MenuItem
+          label="Profile"
+          description="Name, phone, email, and account details"
+          onPress={onProfilePress}
+        />
+        <MenuItem
+          label="Settings"
+          description="Units, GPS consent, and local preferences"
+          onPress={onSettingsPress}
+        />
       </View>
     </View>
+  );
+}
+
+function MenuItem({ label, description, onPress }: { label: string; description: string; onPress: () => void }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+      onPress={onPress}
+    >
+      <Text style={styles.itemTitle}>{label}</Text>
+      <Text style={styles.itemBody}>{description}</Text>
+    </Pressable>
   );
 }
 
@@ -42,34 +54,39 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
   },
   drawer: {
-    width: 290,
-    backgroundColor: appTheme.colors.shadowBlack,
-    padding: 20,
-    gap: 16,
+    width: 300,
+    backgroundColor: appTheme.surface.hero,
+    padding: appTheme.spacing.xl,
+    gap: appTheme.spacing.base,
     borderLeftWidth: 1,
     borderLeftColor: appTheme.colors.playstationBlue,
   },
   title: {
     color: appTheme.colors.inverseWhite,
-    fontSize: 30,
-    fontWeight: '300',
+    ...appTheme.typography.displayL,
+    marginBottom: appTheme.spacing.sm,
   },
   item: {
-    backgroundColor: appTheme.colors.paperWhite,
+    backgroundColor: appTheme.surface.card,
     borderRadius: appTheme.radii.card,
-    padding: 16,
+    padding: appTheme.spacing.base,
     gap: 6,
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
+  },
+  itemPressed: {
+    borderColor: appTheme.colors.playstationBlue,
   },
   itemTitle: {
-    color: appTheme.colors.displayInk,
-    fontSize: 18,
-    fontWeight: '700',
+    color: appTheme.colors.inverseWhite,
+    ...appTheme.typography.headingS,
   },
   itemBody: {
-    color: appTheme.colors.bodyGray,
-    lineHeight: 20,
+    color: appTheme.colors.secondaryText,
+    ...appTheme.typography.caption,
+    lineHeight: 18,
   },
 });

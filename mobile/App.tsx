@@ -8,8 +8,8 @@ const navigationTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: appTheme.colors.consoleBlack,
-    card: appTheme.colors.consoleBlack,
+    background: appTheme.surface.screen,
+    card: appTheme.surface.hero,
     text: appTheme.colors.inverseWhite,
     border: appTheme.colors.playstationBlue,
     primary: appTheme.colors.playstationBlue,

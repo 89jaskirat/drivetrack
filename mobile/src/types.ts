@@ -6,6 +6,8 @@ export type MileageLog = {
   date: string;
   start: number;
   end: number;
+  offline?: boolean;
+  isGigWork?: boolean;
 };
 
 export type FuelLog = {
@@ -22,6 +24,25 @@ export type ExpenseLog = {
   amount: number;
   category: string;
   note: string;
+  receiptUri?: string;
+  hstAmount?: number;
+};
+
+export type EarningsLog = {
+  id: string;
+  date: string;
+  amount: number;
+  note: string;
+  platform?: 'Uber' | 'Lyft' | 'DoorDash' | 'Other';
+};
+
+export type RecurringExpense = {
+  id: string;
+  name: string;
+  amount: number;
+  category: string;
+  dayOfMonth: number;
+  active: boolean;
 };
 
 export type ForumComment = {
@@ -40,6 +61,19 @@ export type ForumPost = {
   votes: number;
   comments: ForumComment[];
   tags: string[];
+  link?: string;
+  imageUri?: string;
+};
+
+export type ShiftSession = {
+  id: string;
+  startTime: string;
+  startOdo: number;
+  endTime?: string;
+  endOdo?: number;
+  earnings?: number;
+  distanceKm?: number;
+  durationMinutes?: number;
 };
 
 export type GasPrice = {
@@ -56,6 +90,30 @@ export type UserProfile = {
   email: string;
   role: Role;
   zone: string;
+  supabaseId?: string;
+};
+
+export type DealCategory = 'Mechanics' | 'Gas' | 'Insurance' | 'Restaurants' | 'Other';
+
+export type Deal = {
+  id: string;
+  sponsor: string;
+  category: DealCategory;
+  headline: string;
+  detail: string;
+  cta: string;
+  zone: string;
+};
+
+export type KnowledgeCategory = 'Tax' | 'Tips' | 'Maintenance';
+
+export type KnowledgeArticle = {
+  id: string;
+  title: string;
+  category: KnowledgeCategory;
+  summary: string;
+  body: string;
+  readMinutes: number;
 };
 
 export type AppState = {
@@ -66,19 +124,39 @@ export type AppState = {
   mileage: MileageLog[];
   fuel: FuelLog[];
   expenses: ExpenseLog[];
+  earnings: EarningsLog[];
+  recurringExpenses: RecurringExpense[];
   posts: ForumPost[];
   gas: GasPrice[];
+  deals: Deal[];
+  articles: KnowledgeArticle[];
+  currentShift: ShiftSession | null;
+  shifts: ShiftSession[];
+  recurringAppliedMonths: string[];
 };
 
 export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
-  Profile: undefined;
   Settings: undefined;
+  TaxReport: undefined;
+  RepeatingExpenses: undefined;
+  Invite: undefined;
+  Shift: { mode: 'start' | 'end' };
+  Compose: {
+    mode: 'post' | 'comment';
+    postId?: string;
+    commentId?: string;
+    contextTitle?: string;
+  };
 };
+
+export type Platform = 'Uber' | 'Lyft' | 'DoorDash' | 'Other';
 
 export type MainTabParamList = {
   Home: undefined;
-  Track: undefined;
   Community: undefined;
+  Deals: undefined;
+  Knowledge: undefined;
+  Profile: undefined;
 };

@@ -1,9 +1,7 @@
-import { useNavigation } from '@react-navigation/native';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ActionButton } from '../components/ActionButton';
 import { AppHeader } from '../components/AppHeader';
-import { AppMenu } from '../components/AppMenu';
 import { ScreenFrame } from '../components/ScreenFrame';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { ModalField, TrackingModal } from '../components/TrackingModal';
@@ -11,14 +9,16 @@ import { useAppState } from '../state/AppStateContext';
 import { appTheme } from '../theme';
 import { ChoiceRow } from './shared/ChoiceRow';
 
+const TODAY = new Date().toISOString().slice(0, 10);
+
 export function TrackScreen() {
-  const navigation = useNavigation<any>();
-  const { state, addMileage, addFuel, addExpense, trackingCategories } = useAppState();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [openModal, setOpenModal] = useState<'mileage' | 'fuel' | 'expense' | null>(null);
-  const [mileageForm, setMileageForm] = useState({ date: '2026-04-14', start: '', end: '' });
-  const [fuelForm, setFuelForm] = useState({ date: '2026-04-14', litres: '', cost: '', odometer: '' });
-  const [expenseForm, setExpenseForm] = useState({ date: '2026-04-14', amount: '', category: 'Parking', note: '' });
+  const { state, addMileage, addFuel, addExpense, addEarnings, trackingCategories } = useAppState();
+  const [openModal, setOpenModal] = useState<'mileage' | 'fuel' | 'expense' | 'earnings' | null>(null);
+
+  const [mileageForm, setMileageForm] = useState({ date: TODAY, start: '', end: '' });
+  const [fuelForm, setFuelForm] = useState({ date: TODAY, litres: '', cost: '', odometer: '' });
+  const [expenseForm, setExpenseForm] = useState({ date: TODAY, amount: '', category: 'Parking', note: '' });
+  const [earningsForm, setEarningsForm] = useState({ date: TODAY, amount: '', note: '' });
 
   return (
     <View style={{ flex: 1 }}>
@@ -27,59 +27,170 @@ export function TrackScreen() {
           <AppHeader
             title={state.profile.name}
             subtitle="Tracking summaries"
-            onMenuPress={() => setMenuOpen(true)}
-            onProfilePress={() => navigation.navigate('Profile')}
           />
         }
       >
-        <SurfaceCard componentName="MileageSummaryCard" title="Mileage" subtitle="Daily odometer logs for tax-ready distance records.">
-          <SummaryValue label="Entries" value={String(state.mileage.length)} />
-          <SummaryValue label="Latest" value={state.mileage[0] ? `${state.mileage[0].date} • ${state.mileage[0].end - state.mileage[0].start} km` : 'No entries'} />
+        <SurfaceCard title="Earnings" subtitle="Daily totals from your rides.">
+          <SummaryRow
+            label="Entries"
+            value={String(state.earnings.length)}
+          />
+          <SummaryRow
+            label="Latest"
+            value={
+              state.earnings[0]
+                ? `${state.earnings[0].date} · $${state.earnings[0].amount.toFixed(2)}`
+                : 'No entries yet'
+            }
+          />
+          <ActionButton label="Add earnings" onPress={() => setOpenModal('earnings')} />
+        </SurfaceCard>
+
+        <SurfaceCard title="Mileage" subtitle="Odometer logs for tax-ready distance records.">
+          <SummaryRow label="Entries" value={String(state.mileage.length)} />
+          <SummaryRow
+            label="Latest"
+            value={
+              state.mileage[0]
+                ? `${state.mileage[0].date} · ${state.mileage[0].end - state.mileage[0].start} km`
+                : 'No entries yet'
+            }
+          />
           <ActionButton label="Add mileage" onPress={() => setOpenModal('mileage')} />
         </SurfaceCard>
 
-        <SurfaceCard componentName="FuelSummaryCard" title="Fuel" subtitle="Track spend and fill-ups for efficiency trends.">
-          <SummaryValue label="Entries" value={String(state.fuel.length)} />
-          <SummaryValue label="Latest" value={state.fuel[0] ? `${state.fuel[0].date} • $${state.fuel[0].cost.toFixed(2)}` : 'No entries'} />
+        <SurfaceCard title="Fuel" subtitle="Track spend and fill-ups for efficiency trends.">
+          <SummaryRow label="Entries" value={String(state.fuel.length)} />
+          <SummaryRow
+            label="Latest"
+            value={state.fuel[0] ? `${state.fuel[0].date} · $${state.fuel[0].cost.toFixed(2)}` : 'No entries yet'}
+          />
           <ActionButton label="Add fuel purchase" onPress={() => setOpenModal('fuel')} />
         </SurfaceCard>
 
-        <SurfaceCard componentName="ExpenseSummaryCard" title="Expenses" subtitle="Capture parking, maintenance, lease, and all supporting costs.">
-          <SummaryValue label="Entries" value={String(state.expenses.length)} />
-          <SummaryValue label="Latest" value={state.expenses[0] ? `${state.expenses[0].category} • $${state.expenses[0].amount.toFixed(2)}` : 'No entries'} />
+        <SurfaceCard title="Expenses" subtitle="Parking, maintenance, lease, and all supporting costs.">
+          <SummaryRow label="Entries" value={String(state.expenses.length)} />
+          <SummaryRow
+            label="Latest"
+            value={
+              state.expenses[0]
+                ? `${state.expenses[0].category} · $${state.expenses[0].amount.toFixed(2)}`
+                : 'No entries yet'
+            }
+          />
           <ActionButton label="Add expense" onPress={() => setOpenModal('expense')} tone="commerce" />
         </SurfaceCard>
       </ScreenFrame>
 
+      {/* Earnings modal */}
       <TrackingModal
-        visible={openModal === 'mileage'}
-        title="Add mileage"
-        componentName="MileageEntryModal"
+        visible={openModal === 'earnings'}
+        title="Add earnings"
         onClose={() => setOpenModal(null)}
       >
-        <ModalField label="Date" value={mileageForm.date} onChangeText={(value) => setMileageForm({ ...mileageForm, date: value })} />
-        <ModalField label="Start odometer" value={mileageForm.start} onChangeText={(value) => setMileageForm({ ...mileageForm, start: value })} keyboardType="numeric" />
-        <ModalField label="End odometer" value={mileageForm.end} onChangeText={(value) => setMileageForm({ ...mileageForm, end: value })} keyboardType="numeric" />
+        <ModalField
+          label="Date"
+          value={earningsForm.date}
+          onChangeText={(v) => setEarningsForm({ ...earningsForm, date: v })}
+          placeholder="YYYY-MM-DD"
+        />
+        <ModalField
+          label="Total earned ($)"
+          value={earningsForm.amount}
+          onChangeText={(v) => setEarningsForm({ ...earningsForm, amount: v })}
+          keyboardType="decimal-pad"
+          placeholder="0.00"
+        />
+        <ModalField
+          label="Note (optional)"
+          value={earningsForm.note}
+          onChangeText={(v) => setEarningsForm({ ...earningsForm, note: v })}
+          placeholder="Airport surge, downtown..."
+          multiline
+        />
         <ActionButton
-          label="Save mileage"
+          label="Save earnings"
           onPress={() => {
-            addMileage({ date: mileageForm.date, start: Number(mileageForm.start), end: Number(mileageForm.end) });
-            setMileageForm({ ...mileageForm, start: '', end: '' });
+            addEarnings({
+              date: earningsForm.date,
+              amount: Number(earningsForm.amount),
+              note: earningsForm.note,
+            });
+            setEarningsForm({ date: TODAY, amount: '', note: '' });
             setOpenModal(null);
           }}
         />
       </TrackingModal>
 
+      {/* Mileage modal */}
+      <TrackingModal
+        visible={openModal === 'mileage'}
+        title="Add mileage"
+        onClose={() => setOpenModal(null)}
+      >
+        <ModalField
+          label="Date"
+          value={mileageForm.date}
+          onChangeText={(v) => setMileageForm({ ...mileageForm, date: v })}
+          placeholder="YYYY-MM-DD"
+        />
+        <ModalField
+          label="Start odometer"
+          value={mileageForm.start}
+          onChangeText={(v) => setMileageForm({ ...mileageForm, start: v })}
+          keyboardType="numeric"
+          placeholder="128440"
+        />
+        <ModalField
+          label="End odometer"
+          value={mileageForm.end}
+          onChangeText={(v) => setMileageForm({ ...mileageForm, end: v })}
+          keyboardType="numeric"
+          placeholder="128598"
+        />
+        <ActionButton
+          label="Save mileage"
+          onPress={() => {
+            addMileage({ date: mileageForm.date, start: Number(mileageForm.start), end: Number(mileageForm.end) });
+            setMileageForm({ date: TODAY, start: '', end: '' });
+            setOpenModal(null);
+          }}
+        />
+      </TrackingModal>
+
+      {/* Fuel modal */}
       <TrackingModal
         visible={openModal === 'fuel'}
         title="Add fuel purchase"
-        componentName="FuelEntryModal"
         onClose={() => setOpenModal(null)}
       >
-        <ModalField label="Date" value={fuelForm.date} onChangeText={(value) => setFuelForm({ ...fuelForm, date: value })} />
-        <ModalField label="Litres" value={fuelForm.litres} onChangeText={(value) => setFuelForm({ ...fuelForm, litres: value })} keyboardType="decimal-pad" />
-        <ModalField label="Cost" value={fuelForm.cost} onChangeText={(value) => setFuelForm({ ...fuelForm, cost: value })} keyboardType="decimal-pad" />
-        <ModalField label="Odometer" value={fuelForm.odometer} onChangeText={(value) => setFuelForm({ ...fuelForm, odometer: value })} keyboardType="numeric" />
+        <ModalField
+          label="Date"
+          value={fuelForm.date}
+          onChangeText={(v) => setFuelForm({ ...fuelForm, date: v })}
+          placeholder="YYYY-MM-DD"
+        />
+        <ModalField
+          label="Litres"
+          value={fuelForm.litres}
+          onChangeText={(v) => setFuelForm({ ...fuelForm, litres: v })}
+          keyboardType="decimal-pad"
+          placeholder="41.2"
+        />
+        <ModalField
+          label="Cost ($)"
+          value={fuelForm.cost}
+          onChangeText={(v) => setFuelForm({ ...fuelForm, cost: v })}
+          keyboardType="decimal-pad"
+          placeholder="57.31"
+        />
+        <ModalField
+          label="Odometer"
+          value={fuelForm.odometer}
+          onChangeText={(v) => setFuelForm({ ...fuelForm, odometer: v })}
+          keyboardType="numeric"
+          placeholder="128390"
+        />
         <ActionButton
           label="Save fuel purchase"
           onPress={() => {
@@ -89,22 +200,43 @@ export function TrackScreen() {
               cost: Number(fuelForm.cost),
               odometer: Number(fuelForm.odometer),
             });
-            setFuelForm({ ...fuelForm, litres: '', cost: '', odometer: '' });
+            setFuelForm({ date: TODAY, litres: '', cost: '', odometer: '' });
             setOpenModal(null);
           }}
         />
       </TrackingModal>
 
+      {/* Expense modal */}
       <TrackingModal
         visible={openModal === 'expense'}
         title="Add expense"
-        componentName="ExpenseEntryModal"
         onClose={() => setOpenModal(null)}
       >
-        <ModalField label="Date" value={expenseForm.date} onChangeText={(value) => setExpenseForm({ ...expenseForm, date: value })} />
-        <ChoiceRow label="Category" options={trackingCategories} value={expenseForm.category} onChange={(value) => setExpenseForm({ ...expenseForm, category: value })} />
-        <ModalField label="Amount" value={expenseForm.amount} onChangeText={(value) => setExpenseForm({ ...expenseForm, amount: value })} keyboardType="decimal-pad" />
-        <ModalField label="Note" value={expenseForm.note} onChangeText={(value) => setExpenseForm({ ...expenseForm, note: value })} />
+        <ModalField
+          label="Date"
+          value={expenseForm.date}
+          onChangeText={(v) => setExpenseForm({ ...expenseForm, date: v })}
+          placeholder="YYYY-MM-DD"
+        />
+        <ChoiceRow
+          label="Category"
+          options={trackingCategories}
+          value={expenseForm.category}
+          onChange={(v) => setExpenseForm({ ...expenseForm, category: v })}
+        />
+        <ModalField
+          label="Amount ($)"
+          value={expenseForm.amount}
+          onChangeText={(v) => setExpenseForm({ ...expenseForm, amount: v })}
+          keyboardType="decimal-pad"
+          placeholder="0.00"
+        />
+        <ModalField
+          label="Note"
+          value={expenseForm.note}
+          onChangeText={(v) => setExpenseForm({ ...expenseForm, note: v })}
+          placeholder="Details..."
+        />
         <ActionButton
           label="Save expense"
           tone="commerce"
@@ -115,31 +247,19 @@ export function TrackScreen() {
               category: expenseForm.category,
               note: expenseForm.note,
             });
-            setExpenseForm({ ...expenseForm, amount: '', note: '' });
+            setExpenseForm({ date: TODAY, amount: '', note: '', category: 'Parking' });
             setOpenModal(null);
           }}
         />
       </TrackingModal>
 
-      <AppMenu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        onProfilePress={() => {
-          setMenuOpen(false);
-          navigation.navigate('Profile');
-        }}
-        onSettingsPress={() => {
-          setMenuOpen(false);
-          navigation.navigate('Settings');
-        }}
-      />
     </View>
   );
 }
 
-function SummaryValue({ label, value }: { label: string; value: string }) {
+function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.summary}>
+    <View style={styles.summaryRow}>
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryValue}>{value}</Text>
     </View>
@@ -147,19 +267,24 @@ function SummaryValue({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  summary: {
-    backgroundColor: appTheme.colors.iceMist,
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: appTheme.surface.input,
     borderRadius: appTheme.radii.media,
-    padding: 14,
+    paddingHorizontal: appTheme.spacing.md,
+    paddingVertical: appTheme.spacing.sm,
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
   },
   summaryLabel: {
     color: appTheme.colors.bodyGray,
-    fontSize: 12,
+    ...appTheme.typography.caption,
   },
   summaryValue: {
-    color: appTheme.colors.displayInk,
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 4,
+    color: appTheme.colors.inverseWhite,
+    ...appTheme.typography.body,
+    fontWeight: '600',
   },
 });

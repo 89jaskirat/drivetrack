@@ -7,12 +7,14 @@ export function Field({
   onChangeText,
   keyboardType,
   multiline,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   keyboardType?: 'default' | 'numeric' | 'decimal-pad';
   multiline?: boolean;
+  placeholder?: string;
 }) {
   return (
     <View style={styles.wrap}>
@@ -22,6 +24,7 @@ export function Field({
         onChangeText={onChangeText}
         keyboardType={keyboardType}
         multiline={multiline}
+        placeholder={placeholder}
         placeholderTextColor={appTheme.colors.bodyGray}
         style={[styles.input, multiline && styles.tall]}
       />
@@ -31,21 +34,23 @@ export function Field({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 8,
+    gap: appTheme.spacing.sm,
   },
   label: {
-    color: appTheme.colors.deepCharcoal,
-    fontWeight: '600',
-    fontSize: 13,
+    color: appTheme.colors.secondaryText,
+    ...appTheme.typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   input: {
     borderWidth: 1,
-    borderColor: appTheme.colors.muteGray,
+    borderColor: appTheme.surface.border,
     borderRadius: appTheme.radii.input,
-    backgroundColor: appTheme.colors.paperWhite,
-    color: appTheme.colors.deepCharcoal,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    backgroundColor: appTheme.surface.input,
+    color: appTheme.colors.inverseWhite,
+    paddingHorizontal: appTheme.spacing.md,
+    paddingVertical: appTheme.spacing.md,
+    ...appTheme.typography.body,
   },
   tall: {
     minHeight: 96,

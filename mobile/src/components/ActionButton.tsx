@@ -8,11 +8,19 @@ export function ActionButton({
 }: {
   label: string;
   onPress: () => void;
-  tone?: 'primary' | 'commerce' | 'light';
+  tone?: 'primary' | 'commerce' | 'ghost';
 }) {
   return (
-    <Pressable style={[styles.button, tone === 'commerce' && styles.commerce, tone === 'light' && styles.light]} onPress={onPress}>
-      <Text style={[styles.text, tone === 'light' && styles.textLight]}>{label}</Text>
+    <Pressable
+      style={({ pressed }) => [
+        styles.button,
+        tone === 'commerce' && styles.commerce,
+        tone === 'ghost' && styles.ghost,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[styles.text, tone === 'ghost' && styles.textGhost]}>{label}</Text>
     </Pressable>
   );
 }
@@ -22,23 +30,27 @@ const styles = StyleSheet.create({
     backgroundColor: appTheme.colors.playstationBlue,
     borderRadius: appTheme.radii.button,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
   },
   commerce: {
     backgroundColor: appTheme.colors.commerceOrange,
   },
-  light: {
-    backgroundColor: appTheme.colors.paperWhite,
-    borderWidth: 2,
-    borderColor: appTheme.colors.playstationBlue,
+  ghost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: appTheme.colors.secondaryText,
+  },
+  pressed: {
+    opacity: 0.6,
   },
   text: {
     color: appTheme.colors.inverseWhite,
-    fontSize: 16,
-    fontWeight: '700',
+    ...appTheme.typography.button,
   },
-  textLight: {
-    color: appTheme.colors.playstationBlue,
+  textGhost: {
+    color: appTheme.colors.secondaryText,
   },
 });
