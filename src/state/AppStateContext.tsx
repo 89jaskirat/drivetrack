@@ -79,7 +79,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           earnings: parsed.earnings ?? seedState.earnings,
           currentShift: parsed.currentShift ?? null,
           shifts: parsed.shifts ?? [],
-          deals: seedState.deals,
           articles: seedState.articles,
           recurringExpenses: parsed.recurringExpenses ?? seedState.recurringExpenses,
           recurringAppliedMonths: parsed.recurringAppliedMonths ?? [],
@@ -118,6 +117,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             recurringAppliedMonths: remote.recurringAppliedMonths.length
               ? remote.recurringAppliedMonths
               : prev.recurringAppliedMonths,
+            deals: remote.deals.length ? remote.deals : prev.deals,
+            posts: remote.posts.length ? remote.posts : prev.posts,
+            gas: remote.gas.length ? remote.gas : prev.gas,
           }));
         }
       }
@@ -204,6 +206,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       earnings: remote.earnings.length ? remote.earnings : prev.earnings,
       shifts: remote.shifts.length ? remote.shifts : prev.shifts,
       recurringExpenses: remote.recurringExpenses.length ? remote.recurringExpenses : prev.recurringExpenses,
+      deals: remote.deals.length ? remote.deals : prev.deals,
+      posts: remote.posts.length ? remote.posts : prev.posts,
+      gas: remote.gas.length ? remote.gas : prev.gas,
     }));
   }, [supabaseUserId]);
 
@@ -286,25 +291,45 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           });
         }
       },
-      addPost: (input) =>
+      addPost: (input) => {
+        const id = makeId('p');
+        const author = state.profile.name;
+        const zone = state.profile.zone;
+        const tags = [zone.toLowerCase()];
         setState((current) => ({
           ...current,
           posts: [
             {
-              id: makeId('p'),
-              author: current.profile.name,
+              id,
+              author,
               title: input.title,
               body: input.body,
               link: input.link,
               imageUri: input.imageUri,
               votes: 1,
               comments: [],
-              tags: [current.profile.zone.toLowerCase()],
+              tags,
             },
             ...current.posts,
           ],
-        })),
-      addComment: (postId, body) =>
+        }));
+        if (supabaseUserId) {
+          pushRow('posts', {
+            id,
+            user_id: supabaseUserId,
+            author_name: author,
+            title: input.title,
+            body: input.body ?? '',
+            zone,
+            tags,
+            up_votes: 1,
+            down_votes: 0,
+          });
+        }
+      },
+      addComment: (postId, body) => {
+        const id = makeId('c');
+        const author = state.profile.name;
         setState((current) => ({
           ...current,
           posts: current.posts.map((post) =>
@@ -314,17 +339,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
                   ...post,
                   comments: [
                     ...post.comments,
-                    {
-                      id: makeId('c'),
-                      author: current.profile.name,
-                      body,
-                      votes: 0,
-                      replies: [],
-                    },
+                    { id, author, body, votes: 0, replies: [] },
                   ],
                 },
           ),
-        })),
+        }));
+        if (supabaseUserId) {
+          pushRow('comments', {
+            id,
+            post_id: postId,
+            user_id: supabaseUserId,
+            author_name: author,
+            body,
+            up_votes: 0,
+            down_votes: 0,
+          });
+        }
+      },
       addReply: (postId, commentId, body) =>
         setState((current) => ({
           ...current,

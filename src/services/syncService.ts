@@ -19,6 +19,9 @@ import type {
   ShiftSession,
   RecurringExpense,
   ForumPost,
+  Deal,
+  DealCategory,
+  GasPrice,
 } from '../types';
 
 // ── Table name mapping ────────────────────────────────────────────────────────
@@ -30,7 +33,8 @@ type SyncTable =
   | 'shifts'
   | 'recurring_expenses'
   | 'recurring_applied_months'
-  | 'posts';
+  | 'posts'
+  | 'comments';
 
 // ── Push a single row ─────────────────────────────────────────────────────────
 // Uses upsert so it works for both insert and update.
@@ -57,6 +61,8 @@ export async function deleteRow(table: SyncTable, id: string): Promise<void> {
 // Called once on app start (after auth). Returns null on network error.
 export async function pullAll(userId: string): Promise<PulledData | null> {
   try {
+    const today = new Date().toISOString().split('T')[0];
+
     const [
       mileageRes,
       fuelRes,
@@ -66,6 +72,9 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       recurringRes,
       appliedRes,
       profileRes,
+      dealsRes,
+      postsRes,
+      gasRes,
     ] = await Promise.all([
       supabase.from('mileage_logs').select('*').eq('user_id', userId).order('created_at'),
       supabase.from('fuel_logs').select('*').eq('user_id', userId).order('created_at'),
@@ -75,6 +84,21 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       supabase.from('recurring_expenses').select('*').eq('user_id', userId),
       supabase.from('recurring_applied_months').select('month_key').eq('user_id', userId),
       supabase.from('profiles').select('*').eq('id', userId).single(),
+      // Global data — RLS handles active/date filtering for deals
+      supabase.from('deals').select('*'),
+      // Community posts — most recent 50, excluding soft-deleted
+      supabase
+        .from('posts')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      // Today's Regular gas prices, joined with station info
+      supabase
+        .from('gas_price_entries')
+        .select('*, gas_stations(name, address)')
+        .eq('date', today)
+        .eq('fuel_type', 'Regular'),
     ]);
 
     return {
@@ -86,6 +110,9 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       recurringExpenses: (recurringRes.data ?? []).map(rowToRecurring),
       recurringAppliedMonths: (appliedRes.data ?? []).map((r: any) => r.month_key as string),
       profile: profileRes.data ?? null,
+      deals: (dealsRes.data ?? []).map(rowToDeal),
+      posts: (postsRes.data ?? []).map(rowToPost),
+      gas: (gasRes.data ?? []).map(rowToGasPrice),
     };
   } catch (err: any) {
     console.warn('[Sync] pullAll failed:', err?.message);
@@ -172,6 +199,40 @@ function rowToRecurring(r: any): RecurringExpense {
   };
 }
 
+function rowToDeal(r: any): Deal {
+  return {
+    id: r.id,
+    sponsor: r.sponsor,
+    category: r.category as DealCategory,
+    headline: r.headline,
+    detail: r.detail ?? '',
+    cta: r.cta ?? 'Learn more',
+    zone: r.zone ?? 'Calgary',
+  };
+}
+
+function rowToPost(r: any): ForumPost {
+  return {
+    id: r.id,
+    author: r.author_name,
+    title: r.title,
+    body: r.body ?? '',
+    votes: (r.up_votes ?? 0) - (r.down_votes ?? 0),
+    comments: [],
+    tags: r.tags ?? [],
+  };
+}
+
+function rowToGasPrice(r: any): GasPrice {
+  return {
+    id: r.id,
+    station: r.gas_stations?.name ?? 'Calgary Average',
+    price: r.price_per_litre,
+    distanceKm: 0,
+    address: r.gas_stations?.address ?? 'Calgary, AB',
+  };
+}
+
 // ── Pulled data shape ─────────────────────────────────────────────────────────
 export interface PulledData {
   mileage: MileageLog[];
@@ -182,4 +243,7 @@ export interface PulledData {
   recurringExpenses: RecurringExpense[];
   recurringAppliedMonths: string[];
   profile: Record<string, unknown> | null;
+  deals: Deal[];
+  posts: ForumPost[];
+  gas: GasPrice[];
 }
