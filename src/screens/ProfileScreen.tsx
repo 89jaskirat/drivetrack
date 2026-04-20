@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ActionButton } from '../components/ActionButton';
 import { ScreenFrame } from '../components/ScreenFrame';
 import { SurfaceCard } from '../components/SurfaceCard';
@@ -8,6 +8,35 @@ import { zones } from '../data/seed';
 import { useAppState } from '../state/AppStateContext';
 import { appTheme } from '../theme';
 import { ChoiceRow } from './shared/ChoiceRow';
+
+// NHTSA free API — no key required
+const NHTSA = 'https://vpic.nhtsa.dot.gov/api/vehicles';
+
+const YEARS = Array.from({ length: 30 }, (_, i) => String(new Date().getFullYear() - i));
+
+async function fetchMakes(): Promise<string[]> {
+  try {
+    const res = await fetch(`${NHTSA}/GetMakesForVehicleType/car?format=json`);
+    const json = await res.json();
+    return (json.Results as { Make_Name: string }[])
+      .map((r) => r.Make_Name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+async function fetchModels(make: string, year: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${NHTSA}/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}?format=json`);
+    const json = await res.json();
+    return (json.Results as { Model_Name: string }[])
+      .map((r) => r.Model_Name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
 
 export function ProfileScreen() {
   const navigation = useNavigation<any>();
@@ -18,10 +47,34 @@ export function ProfileScreen() {
     phone: state.profile.phone,
     email: state.profile.email,
     zone: state.profile.zone,
+    vehicleMake: state.profile.vehicleMake ?? '',
+    vehicleModel: state.profile.vehicleModel ?? '',
+    vehicleYear: state.profile.vehicleYear ? String(state.profile.vehicleYear) : '',
   });
 
+  // NHTSA data
+  const [makes, setMakes] = useState<string[]>([]);
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingMakes, setLoadingMakes] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  useEffect(() => {
+    if (!editing) return;
+    setLoadingMakes(true);
+    fetchMakes().then((m) => { setMakes(m); setLoadingMakes(false); });
+  }, [editing]);
+
+  useEffect(() => {
+    if (!draft.vehicleMake || !draft.vehicleYear) { setModels([]); return; }
+    setLoadingModels(true);
+    fetchModels(draft.vehicleMake, draft.vehicleYear).then((m) => { setModels(m); setLoadingModels(false); });
+  }, [draft.vehicleMake, draft.vehicleYear]);
+
   function handleSave() {
-    updateProfile(draft);
+    updateProfile({
+      ...draft,
+      vehicleYear: draft.vehicleYear ? Number(draft.vehicleYear) : undefined,
+    });
     setEditing(false);
   }
 
@@ -31,6 +84,9 @@ export function ProfileScreen() {
       phone: state.profile.phone,
       email: state.profile.email,
       zone: state.profile.zone,
+      vehicleMake: state.profile.vehicleMake ?? '',
+      vehicleModel: state.profile.vehicleModel ?? '',
+      vehicleYear: state.profile.vehicleYear ? String(state.profile.vehicleYear) : '',
     });
     setEditing(false);
   }
@@ -48,19 +104,63 @@ export function ProfileScreen() {
     >
       {/* ── Personal information ─────────────────────────────────────────────── */}
       {editing ? (
-        <SurfaceCard title="Edit profile">
-          <EditField label="Name" value={draft.name} onChangeText={(v) => setDraft({ ...draft, name: v })} />
-          <EditField label="Phone" value={draft.phone} onChangeText={(v) => setDraft({ ...draft, phone: v })} keyboardType="phone-pad" />
-          <EditField label="Email" value={draft.email} onChangeText={(v) => setDraft({ ...draft, email: v })} keyboardType="email-address" />
-          <ChoiceRow label="Zone" options={zones} value={draft.zone} onChange={(v) => setDraft({ ...draft, zone: v })} />
-          <ActionButton label="Save changes" onPress={handleSave} />
-        </SurfaceCard>
+        <>
+          <SurfaceCard title="Edit profile">
+            <EditField label="Name" value={draft.name} onChangeText={(v) => setDraft({ ...draft, name: v })} />
+            <EditField label="Phone" value={draft.phone} onChangeText={(v) => setDraft({ ...draft, phone: v })} keyboardType="phone-pad" />
+            <EditField label="Email" value={draft.email} onChangeText={(v) => setDraft({ ...draft, email: v })} keyboardType="email-address" />
+            <ChoiceRow label="Zone" options={zones} value={draft.zone} onChange={(v) => setDraft({ ...draft, zone: v })} />
+          </SurfaceCard>
+
+          <SurfaceCard title="Vehicle" subtitle="Used for fuel efficiency calculations">
+            <ChoiceRow
+              label="Year"
+              options={YEARS}
+              value={draft.vehicleYear}
+              onChange={(v) => setDraft({ ...draft, vehicleYear: v, vehicleModel: '' })}
+            />
+            {loadingMakes ? (
+              <ActivityIndicator color={appTheme.colors.playstationBlue} style={{ marginVertical: 8 }} />
+            ) : makes.length > 0 ? (
+              <VehiclePickerRow
+                label="Make"
+                options={makes}
+                value={draft.vehicleMake}
+                onSelect={(v) => setDraft({ ...draft, vehicleMake: v, vehicleModel: '' })}
+              />
+            ) : null}
+            {draft.vehicleMake && draft.vehicleYear ? (
+              loadingModels ? (
+                <ActivityIndicator color={appTheme.colors.playstationBlue} style={{ marginVertical: 8 }} />
+              ) : models.length > 0 ? (
+                <VehiclePickerRow
+                  label="Model"
+                  options={models}
+                  value={draft.vehicleModel}
+                  onSelect={(v) => setDraft({ ...draft, vehicleModel: v })}
+                />
+              ) : null
+            ) : null}
+            <ActionButton label="Save changes" onPress={handleSave} />
+          </SurfaceCard>
+        </>
       ) : (
-        <SurfaceCard title={state.profile.name} subtitle={`${state.profile.zone} · ${state.profile.role}`}>
-          <DetailRow label="Phone" value={state.profile.phone} />
-          <DetailRow label="Email" value={state.profile.email} />
-          <DetailRow label="Zone" value={state.profile.zone} />
-        </SurfaceCard>
+        <>
+          <SurfaceCard title={state.profile.name} subtitle={`${state.profile.zone} · ${state.profile.role}`}>
+            <DetailRow label="Phone" value={state.profile.phone} />
+            <DetailRow label="Email" value={state.profile.email} />
+            <DetailRow label="Zone" value={state.profile.zone} />
+          </SurfaceCard>
+          {(state.profile.vehicleMake || state.profile.vehicleYear) && (
+            <SurfaceCard title="Vehicle">
+              <DetailRow
+                label="Car"
+                value={[state.profile.vehicleYear, state.profile.vehicleMake, state.profile.vehicleModel]
+                  .filter(Boolean).join(' ')}
+              />
+            </SurfaceCard>
+          )}
+        </>
       )}
 
       {/* ── Reports ──────────────────────────────────────────────────────────── */}
@@ -138,6 +238,45 @@ function NavRow({
       </View>
       <Text style={styles.navChevron}>→</Text>
     </Pressable>
+  );
+}
+
+function VehiclePickerRow({
+  label,
+  options,
+  value,
+  onSelect,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onSelect: (v: string) => void;
+}) {
+  return (
+    <View style={styles.editField}>
+      <Text style={styles.editLabel}>{label}</Text>
+      {value ? (
+        <Pressable
+          style={styles.vehicleSelected}
+          onPress={() => onSelect('')}
+        >
+          <Text style={styles.vehicleSelectedText}>{value}</Text>
+          <Text style={styles.vehicleClear}>✕</Text>
+        </Pressable>
+      ) : (
+        <ScrollView
+          style={styles.vehicleScroll}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+        >
+          {options.map((o) => (
+            <Pressable key={o} style={styles.vehicleOption} onPress={() => onSelect(o)}>
+              <Text style={styles.vehicleOptionText}>{o}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+    </View>
   );
 }
 
@@ -236,6 +375,43 @@ const styles = StyleSheet.create({
   navTitle: { color: appTheme.colors.inverseWhite, ...appTheme.typography.body, fontWeight: '600' },
   navSubtitle: { color: appTheme.colors.bodyGray, ...appTheme.typography.caption, lineHeight: 18 },
   navChevron: { color: appTheme.colors.playstationBlue, fontSize: 16, fontWeight: '700' },
+  vehicleScroll: {
+    maxHeight: 180,
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
+    borderRadius: appTheme.radii.input,
+    backgroundColor: appTheme.surface.input,
+  },
+  vehicleOption: {
+    paddingHorizontal: appTheme.spacing.md,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: appTheme.surface.border,
+  },
+  vehicleOptionText: {
+    color: appTheme.colors.inverseWhite,
+    ...appTheme.typography.body,
+  },
+  vehicleSelected: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: appTheme.colors.playstationBlue,
+    borderRadius: appTheme.radii.input,
+    backgroundColor: appTheme.surface.input,
+    paddingHorizontal: appTheme.spacing.md,
+    paddingVertical: appTheme.spacing.md,
+  },
+  vehicleSelectedText: {
+    color: appTheme.colors.inverseWhite,
+    ...appTheme.typography.body,
+    fontWeight: '600',
+  },
+  vehicleClear: {
+    color: appTheme.colors.bodyGray,
+    fontSize: 14,
+  },
   editField: { gap: appTheme.spacing.sm },
   editLabel: {
     color: appTheme.colors.secondaryText,

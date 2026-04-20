@@ -10,12 +10,16 @@ export type MileageLog = {
   isGigWork?: boolean;
 };
 
+export type FuelType = 'Diesel' | 'Regular' | 'Midgrade' | 'Premium';
+export const FUEL_TYPES: FuelType[] = ['Diesel', 'Regular', 'Midgrade', 'Premium'];
+
 export type FuelLog = {
   id: string;
   date: string;
   litres: number;
   cost: number;
   odometer: number;
+  fuelType?: FuelType;
 };
 
 export type ExpenseLog = {
@@ -91,6 +95,9 @@ export type UserProfile = {
   role: Role;
   zone: string;
   supabaseId?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleYear?: number;
 };
 
 export type DealCategory = 'Mechanics' | 'Gas' | 'Insurance' | 'Restaurants' | 'Other';

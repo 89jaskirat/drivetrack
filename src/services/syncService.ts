@@ -122,6 +122,7 @@ function rowToFuel(r: any): FuelLog {
     litres: r.litres,
     cost: r.cost,
     odometer: r.odometer,
+    fuelType: r.fuel_type ?? 'Regular',
   };
 }
 

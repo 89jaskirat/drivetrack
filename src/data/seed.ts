@@ -7,9 +7,9 @@ export const expenseCategories = ['Fuel', 'Maintenance', 'Insurance', 'Parking',
 export const seedState: AppState = {
   signedIn: false,
   profile: {
-    name: 'Jaskirat',
-    phone: '+1 (403) 555-0144',
-    email: '89jaskirat@gmail.com',
+    name: 'Alex Driver',
+    phone: '+1 (403) 555-0100',
+    email: 'driver@example.com',
     role: 'driver',
     zone: 'Calgary',
   },

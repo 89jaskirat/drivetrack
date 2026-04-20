@@ -7,6 +7,7 @@ import { SurfaceCard } from '../components/SurfaceCard';
 import { ModalField, TrackingModal } from '../components/TrackingModal';
 import { useAppState } from '../state/AppStateContext';
 import { appTheme } from '../theme';
+import { FUEL_TYPES, type FuelType } from '../types';
 import { ChoiceRow } from './shared/ChoiceRow';
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -16,7 +17,7 @@ export function TrackScreen() {
   const [openModal, setOpenModal] = useState<'mileage' | 'fuel' | 'expense' | 'earnings' | null>(null);
 
   const [mileageForm, setMileageForm] = useState({ date: TODAY, start: '', end: '' });
-  const [fuelForm, setFuelForm] = useState({ date: TODAY, litres: '', cost: '', odometer: '' });
+  const [fuelForm, setFuelForm] = useState({ date: TODAY, litres: '', cost: '', odometer: '', fuelType: 'Regular' as FuelType });
   const [expenseForm, setExpenseForm] = useState({ date: TODAY, amount: '', category: 'Parking', note: '' });
   const [earningsForm, setEarningsForm] = useState({ date: TODAY, amount: '', note: '' });
 
@@ -177,6 +178,12 @@ export function TrackScreen() {
           keyboardType="decimal-pad"
           placeholder="41.2"
         />
+        <ChoiceRow
+          label="Fuel type"
+          options={FUEL_TYPES}
+          value={fuelForm.fuelType}
+          onChange={(v) => setFuelForm({ ...fuelForm, fuelType: v as FuelType })}
+        />
         <ModalField
           label="Cost ($)"
           value={fuelForm.cost}
@@ -199,8 +206,9 @@ export function TrackScreen() {
               litres: Number(fuelForm.litres),
               cost: Number(fuelForm.cost),
               odometer: Number(fuelForm.odometer),
+              fuelType: fuelForm.fuelType,
             });
-            setFuelForm({ date: TODAY, litres: '', cost: '', odometer: '' });
+            setFuelForm({ date: TODAY, litres: '', cost: '', odometer: '', fuelType: 'Regular' });
             setOpenModal(null);
           }}
         />

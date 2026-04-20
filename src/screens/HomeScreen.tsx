@@ -8,6 +8,7 @@ import { ScreenFrame } from '../components/ScreenFrame';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { useAppState } from '../state/AppStateContext';
 import { appTheme } from '../theme';
+import { FUEL_TYPES, type FuelType } from '../types';
 import { ChoiceRow } from './shared/ChoiceRow';
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -18,7 +19,7 @@ export function HomeScreen() {
 
   const [openModal, setOpenModal] = useState<'mileage' | 'fuel' | 'expense' | 'earnings' | null>(null);
   const [mileageForm, setMileageForm] = useState({ date: TODAY, start: '', end: '', offline: false, isGigWork: true });
-  const [fuelForm, setFuelForm] = useState({ date: TODAY, litres: '', cost: '', odometer: '' });
+  const [fuelForm, setFuelForm] = useState({ date: TODAY, litres: '', cost: '', odometer: '', fuelType: 'Regular' as FuelType });
   const [expenseForm, setExpenseForm] = useState({ date: TODAY, amount: '', category: 'Parking', note: '', hstAmount: '', receiptUri: '' });
   const [earningsForm, setEarningsForm] = useState({ date: TODAY, amount: '', note: '', platform: 'Uber' as 'Uber' | 'Lyft' | 'DoorDash' | 'Other' });
 
@@ -174,10 +175,11 @@ export function HomeScreen() {
 
       <TrackingModal visible={openModal === 'fuel'} title="Add fuel" onClose={() => setOpenModal(null)}>
         <ModalField label="Date" value={fuelForm.date} onChangeText={(v) => setFuelForm({ ...fuelForm, date: v })} placeholder="YYYY-MM-DD" />
+        <ChoiceRow label="Fuel type" options={FUEL_TYPES} value={fuelForm.fuelType} onChange={(v) => setFuelForm({ ...fuelForm, fuelType: v as FuelType })} />
         <ModalField label="Litres" value={fuelForm.litres} onChangeText={(v) => setFuelForm({ ...fuelForm, litres: v })} keyboardType="decimal-pad" placeholder="41.2" />
         <ModalField label="Cost ($)" value={fuelForm.cost} onChangeText={(v) => setFuelForm({ ...fuelForm, cost: v })} keyboardType="decimal-pad" placeholder="57.31" />
         <ModalField label="Odometer" value={fuelForm.odometer} onChangeText={(v) => setFuelForm({ ...fuelForm, odometer: v })} keyboardType="numeric" placeholder="128390" />
-        <Pressable style={styles.saveBtn} onPress={() => { addFuel({ date: fuelForm.date, litres: Number(fuelForm.litres), cost: Number(fuelForm.cost), odometer: Number(fuelForm.odometer) }); setFuelForm({ date: TODAY, litres: '', cost: '', odometer: '' }); setOpenModal(null); }}>
+        <Pressable style={styles.saveBtn} onPress={() => { addFuel({ date: fuelForm.date, litres: Number(fuelForm.litres), cost: Number(fuelForm.cost), odometer: Number(fuelForm.odometer), fuelType: fuelForm.fuelType }); setFuelForm({ date: TODAY, litres: '', cost: '', odometer: '', fuelType: 'Regular' }); setOpenModal(null); }}>
           <Text style={styles.saveBtnText}>Save fuel</Text>
         </Pressable>
       </TrackingModal>

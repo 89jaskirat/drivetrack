@@ -53,6 +53,7 @@ type AppStateContextValue = {
   deleteRecurringExpense: (id: string) => void;
   applyRecurringExpenses: () => void;
   trackingCategories: typeof expenseCategories;
+  refreshFromCloud: () => Promise<void>;
 };
 
 const AppStateContext = createContext<AppStateContextValue | undefined>(undefined);
@@ -103,6 +104,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
                   email: (remote.profile.email as string) || prev.profile.email,
                   role: (remote.profile.role as any) || prev.profile.role,
                   zone: (remote.profile.zone as string) || prev.profile.zone,
+                  vehicleMake: (remote.profile.vehicle_make as string) || prev.profile.vehicleMake,
+                  vehicleModel: (remote.profile.vehicle_model as string) || prev.profile.vehicleModel,
+                  vehicleYear: (remote.profile.vehicle_year as number) || prev.profile.vehicleYear,
                 }
               : prev.profile,
             mileage: remote.mileage.length ? remote.mileage : prev.mileage,
@@ -188,6 +192,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
   }, []);
 
+  const refreshFromCloud = useCallback(async () => {
+    if (!supabaseUserId) return;
+    const remote = await pullAll(supabaseUserId);
+    if (!remote) return;
+    setState((prev) => ({
+      ...prev,
+      mileage: remote.mileage.length ? remote.mileage : prev.mileage,
+      fuel: remote.fuel.length ? remote.fuel : prev.fuel,
+      expenses: remote.expenses.length ? remote.expenses : prev.expenses,
+      earnings: remote.earnings.length ? remote.earnings : prev.earnings,
+      shifts: remote.shifts.length ? remote.shifts : prev.shifts,
+      recurringExpenses: remote.recurringExpenses.length ? remote.recurringExpenses : prev.recurringExpenses,
+    }));
+  }, [supabaseUserId]);
+
   const value = useMemo<AppStateContextValue>(
     () => ({
       ready,
@@ -195,6 +214,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       analytics,
       cloudSignIn,
       signOutCloud,
+      refreshFromCloud,
       signIn: (profile) =>
         setState((current) => ({
           ...current,
@@ -207,11 +227,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           profile: { ...current.profile, ...profile },
         }));
         if (supabaseUserId) {
-          upsertProfile({ id: supabaseUserId, ...profile });
+          const { vehicleMake, vehicleModel, vehicleYear, supabaseId: _sid, ...rest } = profile as any;
+          upsertProfile({
+            id: supabaseUserId,
+            ...rest,
+            ...(vehicleMake !== undefined && { vehicle_make: vehicleMake }),
+            ...(vehicleModel !== undefined && { vehicle_model: vehicleModel }),
+            ...(vehicleYear !== undefined && { vehicle_year: vehicleYear }),
+          });
         }
       },
       setUnits: (units) => setState((current) => ({ ...current, units })),
-      setGpsConsent: (value) => setState((current) => ({ ...current, gpsConsent: value })),
+      setGpsConsent: (value) => {
+        setState((current) => ({ ...current, gpsConsent: value }));
+        if (supabaseUserId) {
+          upsertProfile({ id: supabaseUserId, gps_consent: value });
+        }
+      },
       addMileage: (input) => {
         const row = { id: makeId('m'), ...input };
         setState((current) => ({ ...current, mileage: [row, ...current.mileage] }));
@@ -229,6 +261,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           pushRow('fuel_logs', {
             id: row.id, user_id: supabaseUserId, date: row.date,
             litres: row.litres, cost: row.cost, odometer: row.odometer,
+            fuel_type: row.fuelType ?? 'Regular',
           });
         }
       },
