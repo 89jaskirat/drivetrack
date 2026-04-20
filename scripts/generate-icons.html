@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DriveTrack — Generate App Icons</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #121314;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+  }
+  h1 { font-size: 20px; font-weight: 600; color: #fff; }
+  p  { color: #888; font-size: 13px; max-width: 520px; text-align: center; line-height: 1.6; }
+  .grid { display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; }
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    background: #1f1f1f;
+    border: 1px solid #333;
+    border-radius: 16px;
+    padding: 24px;
+  }
+  canvas { border-radius: 12px; }
+  .lbl { color: #888; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; }
+  button {
+    background: #0070cc;
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #005fac; }
+  .instructions {
+    background: #1f1f1f;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 20px 28px;
+    max-width: 540px;
+    font-size: 13px;
+    color: #ccc;
+    line-height: 1.8;
+  }
+  .instructions strong { color: #fff; }
+  code {
+    background: #2a2a2a;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: monospace;
+    color: #1eaedb;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<h1>DriveTrack — App Icon Generator</h1>
+<p>Click each "Download" button to save the PNG. Then move the files to <code>assets/</code> in the project, replacing the existing files.</p>
+
+<div class="grid" id="grid"></div>
+
+<div class="instructions">
+  <strong>After downloading, copy files to:</strong><br>
+  <code>icon.png</code> → <code>assets/icon.png</code><br>
+  <code>adaptive-icon.png</code> → <code>assets/adaptive-icon.png</code><br>
+  <code>splash-icon.png</code> → <code>assets/splash-icon.png</code><br>
+  <code>favicon.png</code> → <code>assets/favicon.png</code><br><br>
+  Then commit and trigger a new EAS build — icon changes are <strong>not</strong> OTA-updatable.
+</div>
+
+<script>
+// ── Car SVG (viewBox 0 0 300 100) ───────────────────────────────────────────
+function carSVG(bgColor = '#000000', size = 1024) {
+  const rimColor = bgColor === '#000000' ? '#1c1c1c' : bgColor;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100">
+    <ellipse cx="150" cy="95" rx="118" ry="4" fill="#000" opacity="0.5"/>
+    <path d="M 18,76 C 10,76 8,70 8,64 C 8,58 12,52 22,50 C 36,50 60,50 76,50 C 78,40 82,26 94,22 C 108,18 188,18 204,22 C 214,26 220,38 226,50 C 240,50 258,50 268,50 C 278,50 286,54 288,62 C 290,70 288,76 282,76 L 18,76 Z" fill="white"/>
+    <rect x="102" y="40" width="32" height="8"  rx="2" fill="#0070cc"/>
+    <rect x="143" y="35" width="34" height="13" rx="2" fill="#0070cc"/>
+    <rect x="186" y="30" width="32" height="18" rx="2" fill="#1eaedb"/>
+    <rect x="282" y="58" width="6"  height="10" rx="2" fill="#1eaedb" opacity="0.95"/>
+    <rect x="12"  y="58" width="6"  height="10" rx="2" fill="#0070cc" opacity="0.9"/>
+    <circle cx="72"  cy="88" r="20"  fill="${bgColor}"/>
+    <circle cx="72"  cy="88" r="13"  fill="${rimColor}"/>
+    <circle cx="72"  cy="88" r="5.5" fill="white"/>
+    <circle cx="228" cy="88" r="20"  fill="${bgColor}"/>
+    <circle cx="228" cy="88" r="13"  fill="${rimColor}"/>
+    <circle cx="228" cy="88" r="5.5" fill="white"/>
+  </svg>`;
+}
+
+// ── Draw icon onto a canvas ──────────────────────────────────────────────────
+// type: 'icon' | 'adaptive' | 'splash' | 'favicon'
+function drawIcon(canvas, type) {
+  const size = canvas.width;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, size, size);
+
+  const img = new Image();
+
+  // Car dimensions within canvas
+  // Car aspect: 300:100 (3:1). We'll place it centered with padding.
+  let carW, carH, carX, carY;
+
+  if (type === 'favicon') {
+    // Favicon: just the car body, very small — fill most of the square
+    carW = size * 0.9;
+    carH = carW / 3;
+    carX = (size - carW) / 2;
+    carY = (size - carH) / 2;
+  } else if (type === 'splash') {
+    // Splash icon: generous padding, car + wordmark below
+    carW = size * 0.72;
+    carH = carW / 3;
+    carX = (size - carW) / 2;
+    carY = size * 0.28;
+  } else {
+    // icon / adaptive: car centered with ~15% padding each side
+    carW = size * 0.72;
+    carH = carW / 3;
+    carX = (size - carW) / 2;
+    carY = (size - carH) / 2 - size * 0.04; // slight upward nudge
+  }
+
+  const blob = new Blob([carSVG('#000000')], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+
+  img.onload = () => {
+    ctx.drawImage(img, carX, carY, carW, carH);
+    URL.revokeObjectURL(url);
+
+    // Wordmark on splash only
+    if (type === 'splash') {
+      const textY = carY + carH + size * 0.1;
+      const fontSize = Math.round(size * 0.09);
+
+      ctx.font = `700 ${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+
+      // "Drive" in white
+      const driveText = 'Drive';
+      const trackText = 'Track';
+      const driveW = ctx.measureText(driveText).width;
+      const trackW = ctx.measureText(trackText).width;
+      const totalW = driveW + trackW;
+      const startX = size / 2 - totalW / 2;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(driveText, startX, textY);
+
+      // "Track" in blue
+      ctx.fillStyle = '#0070cc';
+      ctx.fillText(trackText, startX + driveW, textY);
+
+      // Tagline
+      ctx.fillStyle = '#666666';
+      ctx.font = `300 ${Math.round(fontSize * 0.3)}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.letterSpacing = '0.28em';
+      ctx.fillText('YOUR PRODUCTIVITY CO-PILOT', size / 2, textY + fontSize * 0.8);
+    }
+  };
+  img.src = url;
+}
+
+// ── Create preview + download for each size ──────────────────────────────────
+const ICONS = [
+  { label: 'icon.png',          filename: 'icon.png',          size: 1024, type: 'icon',     previewSize: 120 },
+  { label: 'adaptive-icon.png', filename: 'adaptive-icon.png', size: 1024, type: 'adaptive', previewSize: 120 },
+  { label: 'splash-icon.png',   filename: 'splash-icon.png',   size: 1024, type: 'splash',   previewSize: 120 },
+  { label: 'favicon.png',       filename: 'favicon.png',       size: 48,   type: 'favicon',  previewSize: 48  },
+];
+
+const grid = document.getElementById('grid');
+
+ICONS.forEach(({ label, filename, size, type, previewSize }) => {
+  // Real canvas (full resolution)
+  const realCanvas = document.createElement('canvas');
+  realCanvas.width  = size;
+  realCanvas.height = size;
+  drawIcon(realCanvas, type);
+
+  // Preview canvas (scaled down for display)
+  const preview = document.createElement('canvas');
+  preview.width  = previewSize;
+  preview.height = previewSize;
+  preview.style.width  = previewSize + 'px';
+  preview.style.height = previewSize + 'px';
+
+  // Copy real → preview after a tick (so img.onload fires first)
+  setTimeout(() => {
+    const ctx = preview.getContext('2d');
+    ctx.drawImage(realCanvas, 0, 0, previewSize, previewSize);
+  }, 300);
+
+  // Download button
+  const btn = document.createElement('button');
+  btn.textContent = 'Download';
+  btn.onclick = () => {
+    // Redraw to ensure fully loaded
+    drawIcon(realCanvas, type);
+    setTimeout(() => {
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = realCanvas.toDataURL('image/png');
+      link.click();
+    }, 200);
+  };
+
+  const lbl = document.createElement('div');
+  lbl.className = 'lbl';
+  lbl.textContent = `${label} (${size}×${size})`;
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.append(preview, lbl, btn);
+  grid.appendChild(card);
+});
+</script>
+</body>
+</html>

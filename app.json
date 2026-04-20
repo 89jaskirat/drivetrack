@@ -37,6 +37,7 @@
     },
     "plugins": [
       "expo-secure-store",
+      "react-native-svg",
       "expo-web-browser",
       [
         "expo-image-picker",

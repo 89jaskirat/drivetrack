@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CarLogo } from '../components/CarLogo';
 import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/authService';
 import { useAppState } from '../state/AppStateContext';
 import { appTheme } from '../theme';
@@ -76,10 +77,14 @@ export function AuthScreen() {
           {/* ── Logo / hero ── */}
           <View style={styles.hero}>
             <View style={styles.logoBox}>
-              <Text style={styles.logoIcon}>◈</Text>
+              <CarLogo width={180} bgColor="#000000" />
             </View>
-            <Text style={styles.appName}>DriveTrack</Text>
-            <Text style={styles.tagline}>Your earnings. Your deductions. Your data.</Text>
+            <View style={styles.wordmark}>
+              <Text style={styles.appName}>
+                Drive<Text style={styles.appNameAccent}>Track</Text>
+              </Text>
+            </View>
+            <Text style={styles.tagline}>Your productivity co-pilot</Text>
           </View>
 
           {/* ── Landing ── */}
@@ -252,33 +257,37 @@ const styles = StyleSheet.create({
   },
   hero: {
     alignItems: 'center',
-    gap: appTheme.spacing.sm,
     paddingTop: appTheme.spacing.xl,
     paddingBottom: appTheme.spacing.lg,
+    gap: appTheme.spacing.sm,
   },
   logoBox: {
-    width: 72,
-    height: 72,
+    width: 210,
+    height: 90,
+    backgroundColor: '#000000',
     borderRadius: 20,
-    backgroundColor: appTheme.surface.hero,
-    borderWidth: 1.5,
-    borderColor: appTheme.colors.playstationBlue,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: appTheme.spacing.sm,
   },
-  logoIcon: { fontSize: 32, color: appTheme.colors.playstationBlue },
+  wordmark: {
+    alignItems: 'center',
+  },
   appName: {
     color: appTheme.colors.inverseWhite,
-    fontSize: 30,
-    fontWeight: '300',
-    letterSpacing: 0.5,
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  appNameAccent: {
+    color: appTheme.colors.playstationBlue,
   },
   tagline: {
     color: appTheme.colors.bodyGray,
-    fontSize: 14,
+    fontSize: 12,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
     textAlign: 'center',
-    lineHeight: 20,
   },
   card: {
     backgroundColor: appTheme.surface.card,
