@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { ScreenFrame } from '../components/ScreenFrame';
@@ -17,8 +17,15 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 export function DealsScreen() {
-  const { state } = useAppState();
+  const { state, refreshFromCloud } = useAppState();
   const [activeCategory, setActiveCategory] = useState<DealCategory | 'All'>('All');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshFromCloud();
+    setRefreshing(false);
+  }, [refreshFromCloud]);
 
   const filtered =
     activeCategory === 'All'
@@ -34,6 +41,8 @@ export function DealsScreen() {
             subtitle={`${state.profile.zone} deals`}
           />
         }
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
       >
         {/* Category filter */}
         <ScrollView
