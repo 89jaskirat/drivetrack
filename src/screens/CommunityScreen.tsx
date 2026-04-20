@@ -42,7 +42,7 @@ export function CommunityScreen() {
             <TextInput
               style={styles.search}
               placeholder="Search posts…"
-              placeholderTextColor={appTheme.colors.muted}
+              placeholderTextColor={appTheme.colors.muteGray}
               value={query}
               onChangeText={setQuery}
               returnKeyType="search"
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: appTheme.spacing.sm,
     paddingVertical: appTheme.spacing.xs,
     backgroundColor: appTheme.surface.card,
-    borderRadius: appTheme.radius.md,
+    borderRadius: appTheme.radii.input,
     color: appTheme.colors.inverseWhite,
     fontSize: 14,
   },
