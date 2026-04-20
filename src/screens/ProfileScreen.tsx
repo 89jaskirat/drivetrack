@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -36,7 +37,11 @@ async function fetchMakes(): Promise<string[]> {
   try {
     const res = await fetch(`${NHTSA}/GetMakesForVehicleType/car?format=json`);
     const json = await res.json();
-    return (json.Results as { Make_Name: string }[]).map((r) => r.Make_Name).sort();
+    // GetMakesForVehicleType returns MakeName (no underscore), unlike GetAllMakes
+    return (json.Results as any[])
+      .map((r) => (r.MakeName || r.Make_Name || '') as string)
+      .filter(Boolean)
+      .sort();
   } catch {
     return [];
   }
@@ -72,12 +77,12 @@ function PickerModal({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
-  const inputRef = useRef<TextInput>(null);
 
+  // Reset search and ensure keyboard is gone when modal opens
   useEffect(() => {
     if (visible) {
+      Keyboard.dismiss();
       setQuery('');
-      setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [visible]);
 
@@ -86,9 +91,17 @@ function PickerModal({
     : options;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={modal.overlay}>
-        <View style={modal.sheet}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+      // Prevent the modal's own inputs from auto-raising the keyboard on open
+      statusBarTranslucent
+    >
+      <Pressable style={modal.overlay} onPress={onClose}>
+        {/* Stop tap-through on the sheet itself */}
+        <Pressable style={modal.sheet} onPress={() => {}}>
           {/* Header */}
           <View style={modal.header}>
             <Text style={modal.title}>{title}</Text>
@@ -100,7 +113,6 @@ function PickerModal({
           {/* Search */}
           <View style={modal.searchWrap}>
             <TextInput
-              ref={inputRef}
               style={modal.search}
               placeholder={`Search ${title.toLowerCase()}…`}
               placeholderTextColor={appTheme.colors.bodyGray}
@@ -111,32 +123,38 @@ function PickerModal({
             />
           </View>
 
-          {/* List */}
-          {loading ? (
-            <ActivityIndicator
-              color={appTheme.colors.playstationBlue}
-              style={{ marginTop: 40 }}
-            />
-          ) : (
-            <FlatList
-              data={filtered}
-              keyExtractor={(item) => item}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <Pressable
-                  style={({ pressed }) => [modal.item, pressed && modal.itemPressed]}
-                  onPress={() => { onSelect(item); onClose(); }}
-                >
-                  <Text style={modal.itemText}>{item}</Text>
-                </Pressable>
-              )}
-              ListEmptyComponent={
-                <Text style={modal.empty}>No results for "{query}"</Text>
-              }
-            />
-          )}
-        </View>
-      </View>
+          {/* List — wrapped in flex: 1 View so FlatList has a defined height */}
+          <View style={{ flex: 1 }}>
+            {loading ? (
+              <ActivityIndicator
+                color={appTheme.colors.playstationBlue}
+                style={{ marginTop: 40 }}
+              />
+            ) : (
+              <FlatList
+                data={filtered}
+                keyExtractor={(item, index) => `${item ?? 'empty'}-${index}`}
+                keyboardShouldPersistTaps="always"
+                renderItem={({ item }) => (
+                  item ? (
+                    <Pressable
+                      style={({ pressed }) => [modal.item, pressed && modal.itemPressed]}
+                      onPress={() => { onSelect(item); onClose(); }}
+                    >
+                      <Text style={modal.itemText}>{item}</Text>
+                    </Pressable>
+                  ) : null
+                )}
+                ListEmptyComponent={
+                  <Text style={modal.empty}>
+                    {query ? `No results for "${query}"` : 'No options available'}
+                  </Text>
+                }
+              />
+            )}
+          </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -274,20 +292,20 @@ export function ProfileScreen() {
                 label="Year"
                 value={draft.vehicleYear}
                 placeholder="Select year"
-                onPress={() => setOpenPicker('year')}
+                onPress={() => { Keyboard.dismiss(); setOpenPicker('year'); }}
               />
               <DropdownField
                 label="Make"
                 value={draft.vehicleMake}
                 placeholder="Select make"
-                onPress={() => setOpenPicker('make')}
+                onPress={() => { Keyboard.dismiss(); setOpenPicker('make'); }}
               />
               <DropdownField
                 label="Model"
                 value={draft.vehicleModel}
                 placeholder={!draft.vehicleMake || !draft.vehicleYear ? 'Select make & year first' : 'Select model'}
                 disabled={!draft.vehicleMake || !draft.vehicleYear}
-                onPress={() => setOpenPicker('model')}
+                onPress={() => { Keyboard.dismiss(); setOpenPicker('model'); }}
               />
               <ActionButton label="Save changes" onPress={handleSave} />
             </SurfaceCard>
@@ -544,8 +562,8 @@ const modal = StyleSheet.create({
     backgroundColor: appTheme.surface.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '75%',
-    paddingBottom: 32,
+    height: '78%',
+    paddingBottom: 24,
   },
   header: {
     flexDirection: 'row',
