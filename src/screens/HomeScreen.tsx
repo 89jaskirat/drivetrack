@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-nativ
 import { CarouselRail } from '../components/CarouselRail';
 import { FAB } from '../components/FAB';
 import { ModalField, TrackingModal } from '../components/TrackingModal';
+import { OnboardingTooltips } from '../components/OnboardingTooltips';
 import { ScreenFrame } from '../components/ScreenFrame';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { useAppState } from '../state/AppStateContext';
@@ -220,6 +221,9 @@ export function HomeScreen() {
           <Text style={styles.saveBtnText}>Save expense</Text>
         </Pressable>
       </TrackingModal>
+
+      {/* First-install onboarding tooltips */}
+      <OnboardingTooltips />
     </View>
   );
 }

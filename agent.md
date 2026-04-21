@@ -21,6 +21,7 @@ Define how the project agent should behave, what it owns, and how it should comm
 - Prioritize [project-context/playstation-design.md](</C:/Users/jaski/OneDrive/99. Codex/Uber App/project-context/playstation-design.md>) as the active UI direction.
 - Use the imported design references for supporting layout, typography, motion, and interaction ideas.
 - Apply the app in smaller patches to avoid hitting the windows command-length limit.
+- If a step fails but something else works then remember what works and document it so you don't keep trying the failing steps recursively. 
 
 ## Communication
 - Be concise and practical.

@@ -1,8 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { expenseCategories, seedState } from '../data/seed';
+import * as Crypto from 'expo-crypto';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert } from 'react-native';
+import { expenseCategories } from '../data/seed';
 import { supabase } from '../lib/supabase';
-import { pullAll, pushRow, deleteRow, upsertProfile } from '../services/syncService';
+import {
+  pullAll,
+  pushRow,
+  deleteRow,
+  incrementVote,
+  upsertProfile,
+  setSyncErrorHandler,
+} from '../services/syncService';
+import { initActivityTracking, setActivityUserId, stopActivityTracking } from '../services/activityService';
+import { audit, auditLogin, auditLogout, initAuditService, setAuditUserId, stopAuditService } from '../services/auditService';
 import {
   AppState,
   EarningsLog,
@@ -18,6 +29,36 @@ import {
 } from '../types';
 
 const STORAGE_KEY = 'uber-driver-companion-local-v3';
+
+// ── Empty initial state (no dummy data) ──────────────────────────────────────
+const emptyState: AppState = {
+  signedIn: false,
+  profile: {
+    name: '',
+    phone: '',
+    email: '',
+    role: 'driver',
+    zone: 'Calgary',
+  },
+  gpsConsent: false,
+  units: 'metric',
+  mileage: [],
+  fuel: [],
+  expenses: [],
+  earnings: [],
+  recurringExpenses: [],
+  posts: [],
+  gas: [],
+  deals: [],
+  articles: [],    // Knowledge articles are bundled in-app, loaded separately
+  currentShift: null,
+  shifts: [],
+  recurringAppliedMonths: [],
+};
+
+// Knowledge articles are static content — keep them bundled
+import { seedState } from '../data/seed';
+const BUNDLED_ARTICLES = seedState.articles;
 
 type AppStateContextValue = {
   ready: boolean;
@@ -58,13 +99,25 @@ type AppStateContextValue = {
 
 const AppStateContext = createContext<AppStateContextValue | undefined>(undefined);
 
-const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`;
+// Generate proper UUIDs that match the Supabase uuid column type
+const makeId = () => Crypto.randomUUID();
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(seedState);
+  const [state, setState] = useState<AppState>({ ...emptyState, articles: BUNDLED_ARTICLES });
   const [ready, setReady] = useState(false);
-  // Track the Supabase user id so sync functions can use it
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
+
+  // Use ref so sync closures always see the latest userId without re-creating
+  const userIdRef = useRef<string | null>(null);
+  useEffect(() => { userIdRef.current = supabaseUserId; }, [supabaseUserId]);
+
+  // ── Sync error handler — show Alert to user ───────────────────────────────
+  useEffect(() => {
+    setSyncErrorHandler((msg) => {
+      // Show a non-blocking alert so the user knows sync failed
+      Alert.alert('Sync issue', msg, [{ text: 'OK' }]);
+    });
+  }, []);
 
   // ── Startup: load local cache, then check for existing Supabase session ────
   useEffect(() => {
@@ -74,14 +127,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       if (saved) {
         const parsed = JSON.parse(saved) as AppState;
         setState({
-          ...seedState,
+          ...emptyState,
           ...parsed,
-          earnings: parsed.earnings ?? seedState.earnings,
+          articles: BUNDLED_ARTICLES,
           currentShift: parsed.currentShift ?? null,
-          shifts: parsed.shifts ?? [],
-          articles: seedState.articles,
-          recurringExpenses: parsed.recurringExpenses ?? seedState.recurringExpenses,
-          recurringAppliedMonths: parsed.recurringAppliedMonths ?? [],
         });
       }
 
@@ -90,7 +139,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       if (data.session?.user) {
         const uid = data.session.user.id;
         setSupabaseUserId(uid);
-        // Pull remote data and merge — remote wins on conflicts
+        userIdRef.current = uid;
+        // Init tracking services
+        initActivityTracking(uid);
+        initAuditService(uid);
+        auditLogin(uid);
+        // Pull remote data — remote always wins; empty arrays are valid (new user)
         const remote = await pullAll(uid);
         if (remote) {
           setState((prev) => ({
@@ -108,18 +162,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
                   vehicleYear: (remote.profile.vehicle_year as number) || prev.profile.vehicleYear,
                 }
               : prev.profile,
-            mileage: remote.mileage.length ? remote.mileage : prev.mileage,
-            fuel: remote.fuel.length ? remote.fuel : prev.fuel,
-            expenses: remote.expenses.length ? remote.expenses : prev.expenses,
-            earnings: remote.earnings.length ? remote.earnings : prev.earnings,
-            shifts: remote.shifts.length ? remote.shifts : prev.shifts,
-            recurringExpenses: remote.recurringExpenses.length ? remote.recurringExpenses : prev.recurringExpenses,
-            recurringAppliedMonths: remote.recurringAppliedMonths.length
-              ? remote.recurringAppliedMonths
-              : prev.recurringAppliedMonths,
-            deals: remote.deals.length ? remote.deals : prev.deals,
-            posts: remote.posts.length ? remote.posts : prev.posts,
-            gas: remote.gas.length ? remote.gas : prev.gas,
+            // Remote always wins — empty arrays are correct for new users
+            mileage: remote.mileage,
+            fuel: remote.fuel,
+            expenses: remote.expenses,
+            earnings: remote.earnings,
+            shifts: remote.shifts,
+            recurringExpenses: remote.recurringExpenses,
+            recurringAppliedMonths: remote.recurringAppliedMonths,
+            // Community data from server
+            deals: remote.deals,
+            posts: remote.posts,
+            gas: remote.gas,
           }));
         }
       }
@@ -158,6 +212,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   // ── cloudSignIn: called by AuthScreen after successful Supabase auth ─────────
   const cloudSignIn = useCallback(async (userId: string, email: string, name: string) => {
     setSupabaseUserId(userId);
+    userIdRef.current = userId;
+    // Init tracking services
+    initActivityTracking(userId);
+    initAuditService(userId);
+    auditLogin(userId);
     // Pull remote data
     const remote = await pullAll(userId);
     setState((prev) => ({
@@ -170,15 +229,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       },
       ...(remote
         ? {
-            mileage: remote.mileage.length ? remote.mileage : prev.mileage,
-            fuel: remote.fuel.length ? remote.fuel : prev.fuel,
-            expenses: remote.expenses.length ? remote.expenses : prev.expenses,
-            earnings: remote.earnings.length ? remote.earnings : prev.earnings,
-            shifts: remote.shifts.length ? remote.shifts : prev.shifts,
-            recurringExpenses: remote.recurringExpenses.length ? remote.recurringExpenses : prev.recurringExpenses,
-            recurringAppliedMonths: remote.recurringAppliedMonths.length
-              ? remote.recurringAppliedMonths
-              : prev.recurringAppliedMonths,
+            // Remote always wins — empty arrays are correct for new users
+            mileage: remote.mileage,
+            fuel: remote.fuel,
+            expenses: remote.expenses,
+            earnings: remote.earnings,
+            shifts: remote.shifts,
+            recurringExpenses: remote.recurringExpenses,
+            recurringAppliedMonths: remote.recurringAppliedMonths,
+            deals: remote.deals,
+            posts: remote.posts,
+            gas: remote.gas,
           }
         : {}),
     }));
@@ -188,29 +249,36 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // ── signOutCloud: clears session and resets to unauthenticated state ─────────
   const signOutCloud = useCallback(async () => {
+    auditLogout();
+    stopActivityTracking();
+    stopAuditService();
     await supabase.auth.signOut().catch(() => undefined);
     setSupabaseUserId(null);
-    setState({ ...seedState, signedIn: false });
+    userIdRef.current = null;
+    setActivityUserId(null);
+    setAuditUserId(null);
+    setState({ ...emptyState, articles: BUNDLED_ARTICLES, signedIn: false });
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
   }, []);
 
   const refreshFromCloud = useCallback(async () => {
-    if (!supabaseUserId) return;
-    const remote = await pullAll(supabaseUserId);
+    const uid = userIdRef.current;
+    if (!uid) return;
+    const remote = await pullAll(uid);
     if (!remote) return;
     setState((prev) => ({
       ...prev,
-      mileage: remote.mileage.length ? remote.mileage : prev.mileage,
-      fuel: remote.fuel.length ? remote.fuel : prev.fuel,
-      expenses: remote.expenses.length ? remote.expenses : prev.expenses,
-      earnings: remote.earnings.length ? remote.earnings : prev.earnings,
-      shifts: remote.shifts.length ? remote.shifts : prev.shifts,
-      recurringExpenses: remote.recurringExpenses.length ? remote.recurringExpenses : prev.recurringExpenses,
-      deals: remote.deals.length ? remote.deals : prev.deals,
-      posts: remote.posts.length ? remote.posts : prev.posts,
-      gas: remote.gas.length ? remote.gas : prev.gas,
+      mileage: remote.mileage,
+      fuel: remote.fuel,
+      expenses: remote.expenses,
+      earnings: remote.earnings,
+      shifts: remote.shifts,
+      recurringExpenses: remote.recurringExpenses,
+      deals: remote.deals,
+      posts: remote.posts,
+      gas: remote.gas,
     }));
-  }, [supabaseUserId]);
+  }, []);
 
   const value = useMemo<AppStateContextValue>(
     () => ({
@@ -231,10 +299,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           ...current,
           profile: { ...current.profile, ...profile },
         }));
-        if (supabaseUserId) {
+        const uid = userIdRef.current;
+        if (uid) {
           const { vehicleMake, vehicleModel, vehicleYear, supabaseId: _sid, ...rest } = profile as any;
           upsertProfile({
-            id: supabaseUserId,
+            id: uid,
             ...rest,
             ...(vehicleMake !== undefined && { vehicle_make: vehicleMake }),
             ...(vehicleModel !== undefined && { vehicle_model: vehicleModel }),
@@ -245,142 +314,181 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setUnits: (units) => setState((current) => ({ ...current, units })),
       setGpsConsent: (value) => {
         setState((current) => ({ ...current, gpsConsent: value }));
-        if (supabaseUserId) {
-          upsertProfile({ id: supabaseUserId, gps_consent: value });
+        const uid = userIdRef.current;
+        if (uid) {
+          upsertProfile({ id: uid, gps_consent: value });
         }
       },
+
+      // ── Mileage ─────────────────────────────────────────────────────────────
       addMileage: (input) => {
-        const row = { id: makeId('m'), ...input };
+        const row = { id: makeId(), ...input };
         setState((current) => ({ ...current, mileage: [row, ...current.mileage] }));
-        if (supabaseUserId) {
+        const uid = userIdRef.current;
+        if (uid) {
           pushRow('mileage_logs', {
-            id: row.id, user_id: supabaseUserId, date: row.date,
+            id: row.id, user_id: uid, date: row.date,
             start_odo: row.start, end_odo: row.end, is_gig_work: row.isGigWork ?? true,
           });
+          audit('create', 'mileage_logs', row.id);
         }
       },
+
+      // ── Fuel ────────────────────────────────────────────────────────────────
       addFuel: (input) => {
-        const row = { id: makeId('f'), ...input };
+        const row = { id: makeId(), ...input };
         setState((current) => ({ ...current, fuel: [row, ...current.fuel] }));
-        if (supabaseUserId) {
+        const uid = userIdRef.current;
+        if (uid) {
           pushRow('fuel_logs', {
-            id: row.id, user_id: supabaseUserId, date: row.date,
+            id: row.id, user_id: uid, date: row.date,
             litres: row.litres, cost: row.cost, odometer: row.odometer,
             fuel_type: row.fuelType ?? 'Regular',
           });
+          audit('create', 'fuel_logs', row.id);
         }
       },
+
+      // ── Expense ─────────────────────────────────────────────────────────────
       addExpense: (input) => {
-        const row = { id: makeId('e'), ...input };
+        const row = { id: makeId(), ...input };
         setState((current) => ({ ...current, expenses: [row, ...current.expenses] }));
-        if (supabaseUserId) {
+        const uid = userIdRef.current;
+        if (uid) {
           pushRow('expense_logs', {
-            id: row.id, user_id: supabaseUserId, date: row.date,
+            id: row.id, user_id: uid, date: row.date,
             amount: row.amount, category: row.category, note: row.note ?? '',
             receipt_url: row.receiptUri ?? '', hst_amount: row.hstAmount ?? 0,
           });
+          audit('create', 'expense_logs', row.id);
         }
       },
+
+      // ── Earnings ────────────────────────────────────────────────────────────
       addEarnings: (input) => {
-        const row = { id: makeId('earn'), ...input };
+        const row = { id: makeId(), ...input };
         setState((current) => ({ ...current, earnings: [row, ...current.earnings] }));
-        if (supabaseUserId) {
+        const uid = userIdRef.current;
+        if (uid) {
           pushRow('earnings_logs', {
-            id: row.id, user_id: supabaseUserId, date: row.date,
+            id: row.id, user_id: uid, date: row.date,
             amount: row.amount, note: row.note ?? '', platform: row.platform ?? 'Uber',
           });
+          audit('create', 'earnings_logs', row.id);
         }
       },
+
+      // ── Forum: Post ─────────────────────────────────────────────────────────
       addPost: (input) => {
-        const id = makeId('p');
-        const author = state.profile.name;
-        const zone = state.profile.zone;
-        const tags = [zone.toLowerCase()];
-        setState((current) => ({
-          ...current,
-          posts: [
-            {
-              id,
-              author,
-              title: input.title,
-              body: input.body,
-              link: input.link,
-              imageUri: input.imageUri,
-              votes: 1,
-              comments: [],
-              tags,
-            },
-            ...current.posts,
-          ],
-        }));
-        if (supabaseUserId) {
-          pushRow('posts', {
-            id,
-            user_id: supabaseUserId,
-            author_name: author,
-            title: input.title,
-            body: input.body ?? '',
-            zone,
-            tags,
-            up_votes: 1,
-            down_votes: 0,
-          });
-        }
+        const id = makeId();
+        setState((current) => {
+          const author = current.profile.name;
+          const zone = current.profile.zone;
+          const tags = [zone.toLowerCase()];
+          const uid = userIdRef.current;
+          if (uid) {
+            pushRow('posts', {
+              id, user_id: uid, author_name: author,
+              title: input.title, body: input.body ?? '', zone, tags,
+              up_votes: 1, down_votes: 0,
+            });
+            audit('create', 'posts', id);
+          }
+          return {
+            ...current,
+            posts: [
+              { id, author, title: input.title, body: input.body, link: input.link, imageUri: input.imageUri, votes: 1, comments: [], tags },
+              ...current.posts,
+            ],
+          };
+        });
       },
+
+      // ── Forum: Comment ──────────────────────────────────────────────────────
       addComment: (postId, body) => {
-        const id = makeId('c');
-        const author = state.profile.name;
+        const id = makeId();
+        setState((current) => {
+          const author = current.profile.name;
+          const uid = userIdRef.current;
+          if (uid) {
+            pushRow('comments', {
+              id, post_id: postId, user_id: uid,
+              author_name: author, body, up_votes: 0, down_votes: 0,
+            });
+            audit('create', 'comments', id);
+          }
+          return {
+            ...current,
+            posts: current.posts.map((post) =>
+              post.id !== postId
+                ? post
+                : { ...post, comments: [...post.comments, { id, author, body, votes: 0, replies: [] }] },
+            ),
+          };
+        });
+      },
+
+      // ── Forum: Reply (pushes to `replies` table) ───────────────────────────
+      addReply: (postId, commentId, body) => {
+        const id = makeId();
+        setState((current) => {
+          const author = current.profile.name;
+          const uid = userIdRef.current;
+          if (uid) {
+            pushRow('replies', {
+              id, comment_id: commentId, user_id: uid,
+              author_name: author, body,
+            });
+            audit('create', 'replies', id);
+          }
+          return {
+            ...current,
+            posts: current.posts.map((post) =>
+              post.id !== postId
+                ? post
+                : {
+                    ...post,
+                    comments: post.comments.map((comment) =>
+                      addReplyToComment(comment, commentId, { id, author, body, votes: 0, replies: [] }),
+                    ),
+                  },
+            ),
+          };
+        });
+      },
+
+      // ── Forum: Votes (now synced!) ─────────────────────────────────────────
+      votePost: (postId, delta) => {
         setState((current) => ({
           ...current,
-          posts: current.posts.map((post) =>
-            post.id !== postId
-              ? post
-              : {
-                  ...post,
-                  comments: [
-                    ...post.comments,
-                    { id, author, body, votes: 0, replies: [] },
-                  ],
-                },
-          ),
+          posts: current.posts.map((post) => (post.id === postId ? { ...post, votes: post.votes + delta } : post)),
         }));
-        if (supabaseUserId) {
-          pushRow('comments', {
-            id,
-            post_id: postId,
-            user_id: supabaseUserId,
-            author_name: author,
-            body,
-            up_votes: 0,
-            down_votes: 0,
-          });
+        if (userIdRef.current) {
+          incrementVote('posts', postId, delta > 0 ? 'up_votes' : 'down_votes');
         }
       },
-      addReply: (postId, commentId, body) =>
+      voteComment: (postId, commentId, delta, replyId) => {
         setState((current) => ({
           ...current,
-          posts: current.posts.map((post) =>
-            post.id !== postId
-              ? post
-              : {
-                  ...post,
-                  comments: post.comments.map((comment) =>
-                    addReplyToComment(comment, commentId, {
-                      id: makeId('c'),
-                      author: current.profile.name,
-                      body,
-                      votes: 0,
-                      replies: [],
-                    }),
-                  ),
-                },
-          ),
-        })),
+          posts: current.posts.map((post) => {
+            if (post.id !== postId) return post;
+            return {
+              ...post,
+              comments: post.comments.map((comment) => updateCommentVotes(comment, commentId, delta, replyId)),
+            };
+          }),
+        }));
+        if (userIdRef.current) {
+          incrementVote('comments', replyId ?? commentId, delta > 0 ? 'up_votes' : 'down_votes');
+        }
+      },
+
+      // ── Shifts (now synced!) ───────────────────────────────────────────────
       startShift: (odo) =>
         setState((current) => ({
           ...current,
           currentShift: {
-            id: makeId('shift'),
+            id: makeId(),
             startTime: new Date().toISOString(),
             startOdo: odo,
           },
@@ -400,89 +508,123 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             distanceKm,
             durationMinutes,
           };
+
+          const mileageId = makeId();
+          const earningsId = makeId();
+          const today = new Date().toISOString().slice(0, 10);
+          const uid = userIdRef.current;
+
+          // Sync shift, mileage, and earnings
+          if (uid) {
+            pushRow('shifts', {
+              id: completed.id, user_id: uid,
+              start_time: completed.startTime, end_time: endTime,
+              start_odo: completed.startOdo, end_odo: odo,
+              earnings, distance: distanceKm, duration: durationMinutes,
+            });
+            pushRow('mileage_logs', {
+              id: mileageId, user_id: uid, date: today,
+              start_odo: current.currentShift.startOdo, end_odo: odo, is_gig_work: true,
+            });
+            audit('create', 'shifts', completed.id);
+            audit('create', 'mileage_logs', mileageId);
+            if (earnings > 0) {
+              pushRow('earnings_logs', {
+                id: earningsId, user_id: uid, date: today,
+                amount: earnings, note: `Shift ended — ${distanceKm} km`, platform: 'Uber',
+              });
+              audit('create', 'earnings_logs', earningsId);
+            }
+          }
+
           return {
             ...current,
             currentShift: null,
             shifts: [completed, ...current.shifts],
             mileage: [
-              {
-                id: makeId('m'),
-                date: new Date().toISOString().slice(0, 10),
-                start: current.currentShift.startOdo,
-                end: odo,
-                isGigWork: true,
-              },
+              { id: mileageId, date: today, start: current.currentShift.startOdo, end: odo, isGigWork: true },
               ...current.mileage,
             ],
             earnings: earnings > 0
-              ? [
-                  {
-                    id: makeId('earn'),
-                    date: new Date().toISOString().slice(0, 10),
-                    amount: earnings,
-                    note: `Shift ended — ${distanceKm} km`,
-                  },
-                  ...current.earnings,
-                ]
+              ? [{ id: earningsId, date: today, amount: earnings, note: `Shift ended — ${distanceKm} km` }, ...current.earnings]
               : current.earnings,
           };
         }),
-      addRecurringExpense: (input) =>
+
+      // ── Recurring expenses (now synced!) ───────────────────────────────────
+      addRecurringExpense: (input) => {
+        const row = { id: makeId(), ...input };
+        setState((current) => ({ ...current, recurringExpenses: [row, ...current.recurringExpenses] }));
+        const uid = userIdRef.current;
+        if (uid) {
+          pushRow('recurring_expenses', {
+            id: row.id, user_id: uid, name: row.name,
+            amount: row.amount, category: row.category,
+            day_of_month: row.dayOfMonth, active: row.active,
+          });
+          audit('create', 'recurring_expenses', row.id);
+        }
+      },
+      updateRecurringExpense: (id, input) => {
         setState((current) => ({
           ...current,
-          recurringExpenses: [{ id: makeId('re'), ...input }, ...current.recurringExpenses],
-        })),
-      updateRecurringExpense: (id, input) =>
-        setState((current) => ({
-          ...current,
-          recurringExpenses: current.recurringExpenses.map((re) =>
-            re.id === id ? { ...re, ...input } : re,
-          ),
-        })),
-      deleteRecurringExpense: (id) =>
+          recurringExpenses: current.recurringExpenses.map((re) => (re.id === id ? { ...re, ...input } : re)),
+        }));
+        const uid = userIdRef.current;
+        if (uid) {
+          const dbFields: Record<string, unknown> = { id };
+          if (input.name !== undefined) dbFields.name = input.name;
+          if (input.amount !== undefined) dbFields.amount = input.amount;
+          if (input.category !== undefined) dbFields.category = input.category;
+          if (input.dayOfMonth !== undefined) dbFields.day_of_month = input.dayOfMonth;
+          if (input.active !== undefined) dbFields.active = input.active;
+          pushRow('recurring_expenses', { ...dbFields, user_id: uid });
+          audit('update', 'recurring_expenses', id);
+        }
+      },
+      deleteRecurringExpense: (id) => {
         setState((current) => ({
           ...current,
           recurringExpenses: current.recurringExpenses.filter((re) => re.id !== id),
-        })),
+        }));
+        if (userIdRef.current) {
+          deleteRow('recurring_expenses', id);
+          audit('delete', 'recurring_expenses', id);
+        }
+      },
       applyRecurringExpenses: () =>
         setState((current) => {
-          const monthStr = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+          const monthStr = new Date().toISOString().slice(0, 7);
           if (current.recurringAppliedMonths.includes(monthStr)) return current;
           const today = new Date().toISOString().slice(0, 10);
+          const uid = userIdRef.current;
           const newExpenses = current.recurringExpenses
             .filter((re) => re.active)
-            .map((re) => ({
-              id: makeId('e'),
-              date: today,
-              amount: re.amount,
-              category: re.category,
-              note: `Recurring: ${re.name}`,
-            }));
+            .map((re) => {
+              const id = makeId();
+              // Sync each generated expense
+              if (uid) {
+                pushRow('expense_logs', {
+                  id, user_id: uid, date: today,
+                  amount: re.amount, category: re.category,
+                  note: `Recurring: ${re.name}`, receipt_url: '', hst_amount: 0,
+                });
+              }
+              return { id, date: today, amount: re.amount, category: re.category, note: `Recurring: ${re.name}` };
+            });
+          // Sync the applied month
+          if (uid) {
+            pushRow('recurring_applied_months', { id: makeId(), user_id: uid, month_key: monthStr });
+          }
           return {
             ...current,
             expenses: [...newExpenses, ...current.expenses],
             recurringAppliedMonths: [...current.recurringAppliedMonths, monthStr],
           };
         }),
-      votePost: (postId, delta) =>
-        setState((current) => ({
-          ...current,
-          posts: current.posts.map((post) => (post.id === postId ? { ...post, votes: post.votes + delta } : post)),
-        })),
-      voteComment: (postId, commentId, delta, replyId) =>
-        setState((current) => ({
-          ...current,
-          posts: current.posts.map((post) => {
-            if (post.id !== postId) return post;
-            return {
-              ...post,
-              comments: post.comments.map((comment) => updateCommentVotes(comment, commentId, delta, replyId)),
-            };
-          }),
-        })),
       trackingCategories: expenseCategories,
     }),
-    [analytics, cloudSignIn, signOutCloud, ready, state, supabaseUserId],
+    [analytics, cloudSignIn, signOutCloud, refreshFromCloud, ready, state],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

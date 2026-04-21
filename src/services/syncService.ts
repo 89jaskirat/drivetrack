@@ -6,8 +6,9 @@
  *  - Then push to Supabase in background (no await at call site)
  *  - On app start, pullAll() fetches remote data and overwrites local
  *
- * All functions are fire-and-forget friendly: they log errors but never throw,
- * so a network failure never breaks the local UX.
+ * Error handling:
+ *  - Errors are collected via onSyncError callback so the UI can display them.
+ *  - Functions never throw so a network failure never breaks the local UX.
  */
 
 import { supabase } from '../lib/supabase';
@@ -19,10 +20,21 @@ import type {
   ShiftSession,
   RecurringExpense,
   ForumPost,
+  ForumComment,
   Deal,
   DealCategory,
   GasPrice,
 } from '../types';
+
+// ── Error callback ────────────────────────────────────────────────────────────
+let _onSyncError: ((msg: string) => void) | null = null;
+export function setSyncErrorHandler(handler: (msg: string) => void) {
+  _onSyncError = handler;
+}
+function reportError(msg: string) {
+  console.warn(msg);
+  _onSyncError?.(msg);
+}
 
 // ── Table name mapping ────────────────────────────────────────────────────────
 type SyncTable =
@@ -34,16 +46,17 @@ type SyncTable =
   | 'recurring_expenses'
   | 'recurring_applied_months'
   | 'posts'
-  | 'comments';
+  | 'comments'
+  | 'replies';
 
 // ── Push a single row ─────────────────────────────────────────────────────────
 // Uses upsert so it works for both insert and update.
 export async function pushRow(table: SyncTable, row: Record<string, unknown>): Promise<void> {
   try {
     const { error } = await supabase.from(table).upsert(row, { onConflict: 'id' });
-    if (error) console.warn(`[Sync] pushRow(${table}) failed:`, error.message);
+    if (error) reportError(`[Sync] pushRow(${table}) failed: ${error.message}`);
   } catch (err: any) {
-    console.warn(`[Sync] pushRow(${table}) exception:`, err?.message);
+    reportError(`[Sync] pushRow(${table}) exception: ${err?.message}`);
   }
 }
 
@@ -51,9 +64,26 @@ export async function pushRow(table: SyncTable, row: Record<string, unknown>): P
 export async function deleteRow(table: SyncTable, id: string): Promise<void> {
   try {
     const { error } = await supabase.from(table).delete().eq('id', id);
-    if (error) console.warn(`[Sync] deleteRow(${table}, ${id}) failed:`, error.message);
+    if (error) reportError(`[Sync] deleteRow(${table}, ${id}) failed: ${error.message}`);
   } catch (err: any) {
-    console.warn(`[Sync] deleteRow exception:`, err?.message);
+    reportError(`[Sync] deleteRow exception: ${err?.message}`);
+  }
+}
+
+// ── Increment a vote column ──────────────────────────────────────────────────
+export async function incrementVote(
+  table: 'posts' | 'comments',
+  id: string,
+  column: 'up_votes' | 'down_votes',
+): Promise<void> {
+  try {
+    const { data, error: fetchErr } = await supabase.from(table).select(column).eq('id', id).single();
+    if (fetchErr || !data) return;
+    const newVal = ((data as any)[column] ?? 0) + 1;
+    const { error } = await supabase.from(table).update({ [column]: newVal }).eq('id', id);
+    if (error) reportError(`[Sync] incrementVote(${table}, ${id}) failed: ${error.message}`);
+  } catch (err: any) {
+    reportError(`[Sync] incrementVote exception: ${err?.message}`);
   }
 }
 
@@ -74,6 +104,8 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       profileRes,
       dealsRes,
       postsRes,
+      commentsRes,
+      repliesRes,
       gasRes,
     ] = await Promise.all([
       supabase.from('mileage_logs').select('*').eq('user_id', userId).order('created_at'),
@@ -84,7 +116,7 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       supabase.from('recurring_expenses').select('*').eq('user_id', userId),
       supabase.from('recurring_applied_months').select('month_key').eq('user_id', userId),
       supabase.from('profiles').select('*').eq('id', userId).single(),
-      // Global data — RLS handles active/date filtering for deals
+      // Global data
       supabase.from('deals').select('*'),
       // Community posts — most recent 50, excluding soft-deleted
       supabase
@@ -93,6 +125,10 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
         .eq('is_deleted', false)
         .order('created_at', { ascending: false })
         .limit(50),
+      // All comments for those posts
+      supabase.from('comments').select('*').eq('is_deleted', false).order('created_at'),
+      // All replies
+      supabase.from('replies').select('*').order('created_at'),
       // Today's Regular gas prices, joined with station info
       supabase
         .from('gas_price_entries')
@@ -100,6 +136,49 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
         .eq('date', today)
         .eq('fuel_type', 'Regular'),
     ]);
+
+    // Build a map of comments per post, and nest replies into comments
+    const commentsRaw = commentsRes.data ?? [];
+    const repliesRaw = repliesRes.data ?? [];
+
+    // Group replies by comment_id
+    const repliesByComment = new Map<string, ForumComment[]>();
+    for (const r of repliesRaw) {
+      const arr = repliesByComment.get(r.comment_id) ?? [];
+      arr.push({
+        id: r.id,
+        author: r.author_name,
+        body: r.body,
+        votes: 0,
+        replies: [],
+      });
+      repliesByComment.set(r.comment_id, arr);
+    }
+
+    // Group comments by post_id, attaching replies
+    const commentsByPost = new Map<string, ForumComment[]>();
+    for (const c of commentsRaw) {
+      const arr = commentsByPost.get(c.post_id) ?? [];
+      arr.push({
+        id: c.id,
+        author: c.author_name,
+        body: c.body,
+        votes: (c.up_votes ?? 0) - (c.down_votes ?? 0),
+        replies: repliesByComment.get(c.id) ?? [],
+      });
+      commentsByPost.set(c.post_id, arr);
+    }
+
+    // Build posts with nested comments
+    const posts: ForumPost[] = (postsRes.data ?? []).map((r: any) => ({
+      id: r.id,
+      author: r.author_name,
+      title: r.title,
+      body: r.body ?? '',
+      votes: (r.up_votes ?? 0) - (r.down_votes ?? 0),
+      comments: commentsByPost.get(r.id) ?? [],
+      tags: r.tags ?? [],
+    }));
 
     return {
       mileage: (mileageRes.data ?? []).map(rowToMileage),
@@ -111,11 +190,11 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       recurringAppliedMonths: (appliedRes.data ?? []).map((r: any) => r.month_key as string),
       profile: profileRes.data ?? null,
       deals: (dealsRes.data ?? []).map(rowToDeal),
-      posts: (postsRes.data ?? []).map(rowToPost),
+      posts,
       gas: (gasRes.data ?? []).map(rowToGasPrice),
     };
   } catch (err: any) {
-    console.warn('[Sync] pullAll failed:', err?.message);
+    reportError(`[Sync] pullAll failed: ${err?.message}`);
     return null;
   }
 }
@@ -124,9 +203,9 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
 export async function upsertProfile(row: Record<string, unknown>): Promise<void> {
   try {
     const { error } = await supabase.from('profiles').upsert(row, { onConflict: 'id' });
-    if (error) console.warn('[Sync] upsertProfile failed:', error.message);
+    if (error) reportError(`[Sync] upsertProfile failed: ${error.message}`);
   } catch (err: any) {
-    console.warn('[Sync] upsertProfile exception:', err?.message);
+    reportError(`[Sync] upsertProfile exception: ${err?.message}`);
   }
 }
 
@@ -208,18 +287,6 @@ function rowToDeal(r: any): Deal {
     detail: r.detail ?? '',
     cta: r.cta ?? 'Learn more',
     zone: r.zone ?? 'Calgary',
-  };
-}
-
-function rowToPost(r: any): ForumPost {
-  return {
-    id: r.id,
-    author: r.author_name,
-    title: r.title,
-    body: r.body ?? '',
-    votes: (r.up_votes ?? 0) - (r.down_votes ?? 0),
-    comments: [],
-    tags: r.tags ?? [],
   };
 }
 

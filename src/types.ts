@@ -160,6 +160,84 @@ export type RootStackParamList = {
 
 export type Platform = 'Uber' | 'Lyft' | 'DoorDash' | 'Other';
 
+// ── GPS Activity Detection ──────────────────────────────────────────────────
+// Priority 1: Zone detection (auto-set zone from location)
+// Priority 2: Drive sessions (start/end location, route, duration, distance)
+// Priority 3: Automatic trip logging (detect driving starts/stops)
+// Priority 4: Idle/waiting time at known spots
+
+export type GpsCoordinate = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;        // metres
+  timestamp: string;        // ISO 8601
+};
+
+export type DriveSession = {
+  id: string;
+  startLocation: GpsCoordinate;
+  endLocation?: GpsCoordinate;
+  startTime: string;
+  endTime?: string;
+  distanceKm: number;
+  durationMinutes: number;
+  status: 'active' | 'completed';
+  autoDetected: boolean;     // true if detected via motion, false if manual
+};
+
+export type DetectedZone = {
+  zone: string;              // e.g. 'Calgary'
+  confidence: number;        // 0-1
+  detectedAt: string;
+  coordinate: GpsCoordinate;
+};
+
+export type IdleStop = {
+  id: string;
+  location: GpsCoordinate;
+  arrivalTime: string;
+  departureTime?: string;
+  durationMinutes: number;
+  label?: string;            // e.g. 'Airport Queue', 'Downtown'
+};
+
+export type GpsActivityState = {
+  enabled: boolean;
+  currentSession?: DriveSession;
+  detectedZone?: DetectedZone;
+  recentSessions: DriveSession[];
+  idleStops: IdleStop[];
+};
+
+// ── User Activity Tracking ──────────────────────────────────────────────────
+export type ActivityEvent = {
+  id: string;
+  screenName: string;
+  action: string;            // e.g. 'screen_view', 'tap_add_mileage', 'tap_start_shift'
+  metadata?: Record<string, string | number>;
+  timestamp: string;
+  sessionId: string;
+};
+
+// ── Audit Log ───────────────────────────────────────────────────────────────
+export type AuditAction =
+  | 'login'
+  | 'logout'
+  | 'create'
+  | 'update'
+  | 'delete';
+
+export type AuditLogEntry = {
+  id: string;
+  userId: string;
+  action: AuditAction;
+  resource: string;          // e.g. 'mileage_logs', 'posts', 'profile'
+  resourceId?: string;
+  details?: Record<string, unknown>;
+  timestamp: string;
+  sessionId: string;
+};
+
 export type MainTabParamList = {
   Home: undefined;
   Community: undefined;

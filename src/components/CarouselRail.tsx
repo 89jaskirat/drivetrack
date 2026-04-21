@@ -16,7 +16,14 @@ type CommunityRailProps = {
 
 export function CarouselRail(props: GasRailProps | CommunityRailProps) {
   return (
-    <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={260 + appTheme.spacing.md}
+      snapToAlignment="start"
+      decelerationRate="fast"
+      contentContainerStyle={styles.rail}
+    >
       {props.mode === 'gas'
         ? props.items.slice(0, 3).map((item) => (
             <View key={item.id} style={styles.slide}>
