@@ -91,7 +91,12 @@ export async function incrementVote(
 // Called once on app start (after auth). Returns null on network error.
 export async function pullAll(userId: string): Promise<PulledData | null> {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    // Gas prices: show previous day's prices until 6am MST (UTC-7)
+    const nowUtc = new Date();
+    const mstHour = (nowUtc.getUTCHours() + 24 - 7) % 24;
+    const gasPriceDate = new Date(nowUtc);
+    if (mstHour < 6) gasPriceDate.setUTCDate(gasPriceDate.getUTCDate() - 1);
+    const today = gasPriceDate.toISOString().split('T')[0];
 
     const [
       mileageRes,

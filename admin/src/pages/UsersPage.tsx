@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, writeAuditLog } from '../lib/supabase';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import type { AdminProfile, Role } from '../types';
 import RoleGuard from '../components/RoleGuard';
 
@@ -19,6 +19,7 @@ async function fetchUsers(): Promise<AdminProfile[]> {
 
 export default function UsersPage() {
   const { role: adminRole } = useOutletContext<{ role: Role }>();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterZone, setFilterZone] = useState('');
@@ -104,7 +105,11 @@ export default function UsersPage() {
           </thead>
           <tbody>
             {filtered.map((u) => (
-              <tr key={u.id} className="border-b border-surface-border last:border-0 hover:bg-surface/50">
+              <tr
+                key={u.id}
+                className="border-b border-surface-border last:border-0 hover:bg-surface/50 cursor-pointer"
+                onClick={() => navigate(`/users/${u.id}`)}
+              >
                 <td className="px-4 py-3 text-white">{u.name || '—'}</td>
                 <td className="px-4 py-3 text-gray-400 text-xs">{u.email}</td>
                 <td className="px-4 py-3">
@@ -119,7 +124,7 @@ export default function UsersPage() {
                 <RoleGuard role={adminRole} require="superAdmin">
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => setEditing(u)}
+                      onClick={(e) => { e.stopPropagation(); setEditing(u); }}
                       className="text-xs text-brand hover:underline"
                     >
                       Edit

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, writeAuditLog } from '../lib/supabase';
-import type { ForumPost, ForumComment } from '../types';
+import type { ForumPost, ForumComment, ForumReply } from '../types';
 
-type Tab = 'posts' | 'comments';
+type Tab = 'posts' | 'comments' | 'replies';
 
 async function fetchPosts(): Promise<ForumPost[]> {
   const { data, error } = await supabase
@@ -25,6 +25,16 @@ async function fetchComments(): Promise<ForumComment[]> {
   return data as ForumComment[];
 }
 
+async function fetchReplies(): Promise<ForumReply[]> {
+  const { data, error } = await supabase
+    .from('replies')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return data as ForumReply[];
+}
+
 export default function ModerationPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('posts');
@@ -33,7 +43,9 @@ export default function ModerationPage() {
 
   const { data: posts = [], isLoading: postsLoading } = useQuery({ queryKey: ['mod-posts'], queryFn: fetchPosts });
   const { data: comments = [], isLoading: commentsLoading } = useQuery({ queryKey: ['mod-comments'], queryFn: fetchComments });
+  const { data: replies = [], isLoading: repliesLoading } = useQuery({ queryKey: ['mod-replies'], queryFn: fetchReplies });
 
+  // Soft-delete for posts and comments (they have is_deleted column)
   const softDelete = useMutation({
     mutationFn: async ({ table, id, reason: r }: { table: 'posts' | 'comments'; id: string; reason: string }) => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -67,15 +79,25 @@ export default function ModerationPage() {
     },
   });
 
-  const isLoading = tab === 'posts' ? postsLoading : commentsLoading;
-  const items = tab === 'posts' ? posts : comments;
+  // Hard-delete for replies (no soft-delete columns on replies table)
+  const hardDeleteReply = useMutation({
+    mutationFn: async (id: string) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { error } = await supabase.from('replies').delete().eq('id', id);
+      if (error) throw error;
+      await writeAuditLog(session?.user.id ?? '', 'delete_reply', 'replies', id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mod-replies'] }),
+  });
+
+  const isLoading = tab === 'posts' ? postsLoading : tab === 'comments' ? commentsLoading : repliesLoading;
 
   return (
     <div>
       <h1 className="text-white text-xl font-bold mb-6">Moderation</h1>
 
       <div className="flex gap-2 mb-4">
-        {(['posts', 'comments'] as Tab[]).map((t) => (
+        {(['posts', 'comments', 'replies'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -89,55 +111,81 @@ export default function ModerationPage() {
       {isLoading && <div className="text-gray-500 text-sm">Loading...</div>}
 
       <div className="space-y-3">
-        {items.map((item) => {
-          const post = item as ForumPost;
-          const comment = item as ForumComment;
-          const isPost = tab === 'posts';
-
-          return (
-            <div
-              key={item.id}
-              className={`bg-surface-raised border rounded-xl px-4 py-3 ${item.is_deleted ? 'border-red-500/20 opacity-60' : 'border-surface-border'}`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  {isPost && (
-                    <div className="text-white text-sm font-medium mb-1 truncate">{post.title}</div>
-                  )}
-                  <div className="text-gray-400 text-xs line-clamp-2">{isPost ? post.body : comment.body}</div>
-                  <div className="flex gap-3 mt-2 text-xs text-gray-600">
-                    <span>{item.author_name}</span>
-                    {isPost && <span>{post.zone}</span>}
-                    <span>{new Date(item.created_at).toLocaleDateString()}</span>
-                    {item.is_deleted && (
-                      <span className="text-red-400">Removed — {item.moderation_reason}</span>
-                    )}
+        {tab === 'replies'
+          ? replies.map((reply) => (
+              <div
+                key={reply.id}
+                className="bg-surface-raised border border-surface-border rounded-xl px-4 py-3"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-gray-400 text-xs line-clamp-2">{reply.body}</div>
+                    <div className="flex gap-3 mt-2 text-xs text-gray-600">
+                      <span>{reply.author_name}</span>
+                      <span>{new Date(reply.created_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="shrink-0 flex gap-2">
-                  {item.is_deleted ? (
+                  <div className="shrink-0">
                     <button
-                      onClick={() => restore.mutate({ table: tab, id: item.id })}
-                      className="text-xs text-green-400 hover:underline"
-                    >
-                      Restore
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => { setReasonModal({ table: tab, id: item.id }); setReason(''); }}
-                      className="text-xs text-red-400 hover:underline"
+                      onClick={() => hardDeleteReply.mutate(reply.id)}
+                      disabled={hardDeleteReply.isPending}
+                      className="text-xs text-red-400 hover:underline disabled:opacity-50"
                     >
                       Remove
                     </button>
-                  )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            ))
+          : (tab === 'posts' ? posts : comments).map((item) => {
+              const post = item as ForumPost;
+              const comment = item as ForumComment;
+              const isPost = tab === 'posts';
+
+              return (
+                <div
+                  key={item.id}
+                  className={`bg-surface-raised border rounded-xl px-4 py-3 ${item.is_deleted ? 'border-red-500/20 opacity-60' : 'border-surface-border'}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      {isPost && (
+                        <div className="text-white text-sm font-medium mb-1 truncate">{post.title}</div>
+                      )}
+                      <div className="text-gray-400 text-xs line-clamp-2">{isPost ? post.body : comment.body}</div>
+                      <div className="flex gap-3 mt-2 text-xs text-gray-600">
+                        <span>{item.author_name}</span>
+                        {isPost && <span>{post.zone}</span>}
+                        <span>{new Date(item.created_at).toLocaleDateString()}</span>
+                        {item.is_deleted && (
+                          <span className="text-red-400">Removed — {item.moderation_reason}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex gap-2">
+                      {item.is_deleted ? (
+                        <button
+                          onClick={() => restore.mutate({ table: tab as 'posts' | 'comments', id: item.id })}
+                          className="text-xs text-green-400 hover:underline"
+                        >
+                          Restore
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { setReasonModal({ table: tab as 'posts' | 'comments', id: item.id }); setReason(''); }}
+                          className="text-xs text-red-400 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
       </div>
 
-      {items.length === 0 && !isLoading && (
+      {((tab === 'replies' ? replies : tab === 'posts' ? posts : comments).length === 0) && !isLoading && (
         <div className="text-gray-500 text-sm text-center py-8">No {tab} found.</div>
       )}
 

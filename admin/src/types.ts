@@ -66,6 +66,15 @@ export interface ForumComment {
   created_at: string;
 }
 
+export interface ForumReply {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+
 export interface KnowledgeArticle {
   id: string;
   title: string;

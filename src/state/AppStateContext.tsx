@@ -435,8 +435,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           const author = current.profile.name;
           const uid = userIdRef.current;
           if (uid) {
+            // replies.comment_id must reference a top-level comment (FK constraint)
+            const rootCommentId = findRootCommentId(current.posts.find((p) => p.id === postId)?.comments ?? [], commentId) ?? commentId;
             pushRow('replies', {
-              id, comment_id: commentId, user_id: uid,
+              id, comment_id: rootCommentId, user_id: uid,
               author_name: author, body,
             });
             audit('create', 'replies', id);
@@ -628,6 +630,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+}
+
+// Find the top-level comment ID that contains targetId (may be targetId itself)
+function findRootCommentId(comments: ForumComment[], targetId: string): string | null {
+  for (const comment of comments) {
+    if (comment.id === targetId) return comment.id;
+    if (commentContainsId(comment, targetId)) return comment.id;
+  }
+  return null;
+}
+function commentContainsId(comment: ForumComment, targetId: string): boolean {
+  return (comment.replies ?? []).some((r) => r.id === targetId || commentContainsId(r, targetId));
 }
 
 function addReplyToComment(comment: ForumComment, targetId: string, reply: ForumComment): ForumComment {

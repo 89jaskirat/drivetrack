@@ -10,6 +10,7 @@ import GasPricesPage from './pages/GasPricesPage';
 import ModerationPage from './pages/ModerationPage';
 import ArticlesPage from './pages/ArticlesPage';
 import PromotionsPage from './pages/PromotionsPage';
+import UserDetailPage from './pages/UserDetailPage';
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
 
@@ -28,6 +29,7 @@ export default function App() {
           >
             <Route path="/"           element={<DashboardPage />} />
             <Route path="/users"      element={<UsersPage />} />
+            <Route path="/users/:id"  element={<UserDetailPage />} />
             <Route path="/zones"      element={<ZonesPage />} />
             <Route path="/gas-prices" element={<GasPricesPage />} />
             <Route path="/promotions" element={<PromotionsPage />} />
