@@ -142,34 +142,57 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
         .eq('fuel_type', 'Regular'),
     ]);
 
-    // Build a map of comments per post, and nest replies into comments
+    // Build a map of comments per post, and nest replies into comments recursively
     const commentsRaw = commentsRes.data ?? [];
     const repliesRaw = repliesRes.data ?? [];
 
-    // Group replies by comment_id
-    const repliesByComment = new Map<string, ForumComment[]>();
+    // Build a map of all replies by ID for efficient lookup
+    const repliesById = new Map<string, any>();
     for (const r of repliesRaw) {
-      const arr = repliesByComment.get(r.comment_id) ?? [];
-      arr.push({
+      repliesById.set(r.id, r);
+    }
+
+    // Recursively build reply tree (supports replies-to-replies)
+    function buildReplyTree(replyId: string): ForumComment {
+      const r = repliesById.get(replyId);
+      if (!r) return { id: '', author: '', body: '', votes: 0, replies: [] };
+
+      // Find all replies that have this reply as parent
+      const childReplies: ForumComment[] = [];
+      for (const candidate of repliesRaw) {
+        if (candidate.parent_id === replyId) {
+          childReplies.push(buildReplyTree(candidate.id));
+        }
+      }
+
+      return {
         id: r.id,
         author: r.author_name,
         body: r.body,
-        votes: 0,
-        replies: [],
-      });
-      repliesByComment.set(r.comment_id, arr);
+        votes: (r.up_votes ?? 0) - (r.down_votes ?? 0),
+        replies: childReplies,
+      };
     }
 
-    // Group comments by post_id, attaching replies
+    // Group comments by post_id, with properly nested replies
     const commentsByPost = new Map<string, ForumComment[]>();
     for (const c of commentsRaw) {
       const arr = commentsByPost.get(c.post_id) ?? [];
+
+      // Find direct replies to this comment (parent_id is null or undefined)
+      const directReplies: ForumComment[] = [];
+      for (const r of repliesRaw) {
+        if (r.comment_id === c.id && !r.parent_id) {
+          directReplies.push(buildReplyTree(r.id));
+        }
+      }
+
       arr.push({
         id: c.id,
         author: c.author_name,
         body: c.body,
         votes: (c.up_votes ?? 0) - (c.down_votes ?? 0),
-        replies: repliesByComment.get(c.id) ?? [],
+        replies: directReplies,
       });
       commentsByPost.set(c.post_id, arr);
     }
