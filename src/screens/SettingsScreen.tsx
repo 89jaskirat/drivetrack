@@ -43,6 +43,39 @@ export function SettingsScreen() {
           </View>
         </SurfaceCard>
 
+        <SurfaceCard title="Legal">
+          <Pressable
+            style={({ pressed }) => [styles.linkRow, pressed && styles.linkRowPressed]}
+            onPress={() => navigation.navigate('Legal', { doc: 'terms' })}
+          >
+            <View style={styles.linkContent}>
+              <Text style={styles.linkTitle}>Terms & Conditions</Text>
+              <Text style={styles.linkBody}>View the full terms of service</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.linkRow, pressed && styles.linkRowPressed]}
+            onPress={() => navigation.navigate('Legal', { doc: 'privacy' })}
+          >
+            <View style={styles.linkContent}>
+              <Text style={styles.linkTitle}>Privacy Policy</Text>
+              <Text style={styles.linkBody}>How we collect and use your data</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.linkRow, pressed && styles.linkRowPressed]}
+            onPress={() => navigation.navigate('Legal', { doc: 'community' })}
+          >
+            <View style={styles.linkContent}>
+              <Text style={styles.linkTitle}>Community Guidelines</Text>
+              <Text style={styles.linkBody}>Forum rules and moderation policy</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        </SurfaceCard>
+
       </ScreenFrame>
 
     </View>

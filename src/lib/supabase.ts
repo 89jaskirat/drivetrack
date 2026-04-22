@@ -1,16 +1,23 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 // ── Secure storage adapter for Supabase JWT ──────────────────────────────────
-// Supabase needs a key-value store for session persistence.
-// expo-secure-store uses the OS secure enclave (Keychain / Keystore).
-const SecureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
+// expo-secure-store has no web implementation — fall back to AsyncStorage on web.
+const SecureStoreAdapter = Platform.OS === 'web'
+  ? {
+      getItem: (key: string) => AsyncStorage.getItem(key),
+      setItem: (key: string, value: string) => AsyncStorage.setItem(key, value),
+      removeItem: (key: string) => AsyncStorage.removeItem(key),
+    }
+  : {
+      getItem: (key: string) => SecureStore.getItemAsync(key),
+      setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+      removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+    };
 
 // ── Config ───────────────────────────────────────────────────────────────────
 // Fill these in app.json → extra after creating your Supabase project.

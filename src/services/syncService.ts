@@ -112,6 +112,8 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       commentsRes,
       repliesRes,
       gasRes,
+      streakRes,
+      badgesRes,
     ] = await Promise.all([
       supabase.from('mileage_logs').select('*').eq('user_id', userId).order('created_at'),
       supabase.from('fuel_logs').select('*').eq('user_id', userId).order('created_at'),
@@ -140,6 +142,10 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
         .select('*, gas_stations(name, address)')
         .eq('date', today)
         .eq('fuel_type', 'Regular'),
+      // Streak row (single row keyed by user_id)
+      supabase.from('driver_streaks').select('*').eq('user_id', userId).maybeSingle(),
+      // Earned badges
+      supabase.from('driver_badges').select('badge_slug').eq('user_id', userId),
     ]);
 
     // Build a map of comments per post, and nest replies into comments recursively
@@ -220,6 +226,8 @@ export async function pullAll(userId: string): Promise<PulledData | null> {
       deals: (dealsRes.data ?? []).map(rowToDeal),
       posts,
       gas: (gasRes.data ?? []).map(rowToGasPrice),
+      streak: streakRes.data ? rowToStreak(streakRes.data) : null,
+      badges: (badgesRes.data ?? []).map((r: any) => r.badge_slug as string),
     };
   } catch (err: any) {
     reportError(`[Sync] pullAll failed: ${err?.message}`);
@@ -328,6 +336,16 @@ function rowToGasPrice(r: any): GasPrice {
   };
 }
 
+function rowToStreak(r: any): import('../types').DriverStreak {
+  return {
+    currentStreak: r.current_streak ?? 0,
+    longestStreak: r.longest_streak ?? 0,
+    lastActiveDate: r.last_active_date ?? null,
+    graceDaysUsed: r.grace_days_used ?? 0,
+    graceDaysMonth: r.grace_days_month ?? 0,
+  };
+}
+
 // ── Pulled data shape ─────────────────────────────────────────────────────────
 export interface PulledData {
   mileage: MileageLog[];
@@ -341,4 +359,6 @@ export interface PulledData {
   deals: Deal[];
   posts: ForumPost[];
   gas: GasPrice[];
+  streak: import('../types').DriverStreak | null;
+  badges: string[];
 }

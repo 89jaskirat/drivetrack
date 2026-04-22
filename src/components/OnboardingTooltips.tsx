@@ -1,106 +1,138 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { appTheme } from '../theme';
 
 const ONBOARDING_KEY = 'drivetrack-onboarding-complete';
+
+const TAB_BAR_H = 64;
 
 type Tip = {
   icon: string;
   title: string;
   body: string;
-  /** Spotlight position as fraction of screen (0-1) */
-  spotX: number;
-  spotY: number;
-  /** Where to anchor the card — 'top' = card sits near top, 'bottom' = near bottom */
+  cx: number;
+  cy: number;
+  sectionW: number;
+  sectionH: number;
+  radius: number;
   cardAnchor: 'top' | 'bottom';
+  scrollY?: number;
 };
 
-const TIPS: Tip[] = [
-  {
-    icon: '+',
-    title: 'Quick-log anything',
-    body: 'Tap the + button to log mileage, fuel, expenses, or earnings in seconds.',
-    spotX: 0.87,
-    spotY: 0.85,
-    cardAnchor: 'top',
-  },
-  {
-    icon: '▶',
-    title: 'Shift tracking',
-    body: 'Start a shift to auto-track your time and distance on the road.',
-    spotX: 0.5,
-    spotY: 0.27,
-    cardAnchor: 'bottom',
-  },
-  {
-    icon: '⬡',
-    title: 'Community forum',
-    body: 'Ask questions, share tips, and find intel from drivers in your zone.',
-    spotX: 0.3,
-    spotY: 0.96,
-    cardAnchor: 'top',
-  },
-  {
-    icon: '⛽',
-    title: 'Lowest gas prices',
-    body: 'See the cheapest gas near you, updated daily by the community.',
-    spotX: 0.5,
-    spotY: 0.52,
-    cardAnchor: 'top',
-  },
-  {
-    icon: '★',
-    title: 'Deals & promos',
-    body: 'Exclusive discounts from local mechanics, gas stations, and restaurants.',
-    spotX: 0.5,
-    spotY: 0.96,
-    cardAnchor: 'top',
-  },
-];
+function makeTips(width: number, height: number): Tip[] {
+  return [
+    {
+      icon: '+',
+      title: 'Quick-log anything',
+      body: 'Tap the + button to log mileage, fuel, expenses, or earnings in seconds.',
+      cx: width * 0.87,
+      cy: height * 0.80,
+      sectionW: 64,
+      sectionH: 64,
+      radius: 32,
+      cardAnchor: 'top',
+    },
+    {
+      icon: '▶',
+      title: 'Shift tracking',
+      body: 'Start a shift to auto-track your time and distance on the road.',
+      cx: width * 0.50,
+      cy: height * 0.19,
+      sectionW: width * 0.88,
+      sectionH: 72,
+      radius: 16,
+      cardAnchor: 'bottom',
+    },
+    {
+      icon: '⬡',
+      title: 'Community forum',
+      body: 'Ask questions, share tips, and find intel from drivers in your zone.',
+      cx: width * 0.30,
+      cy: height * 0.965,
+      sectionW: width * 0.19,
+      sectionH: TAB_BAR_H - 8,
+      radius: 12,
+      cardAnchor: 'top',
+    },
+    {
+      icon: '⛽',
+      title: 'Lowest gas prices',
+      body: 'See the cheapest gas near you, updated daily by the community.',
+      cx: width * 0.50,
+      cy: height * 0.62,
+      sectionW: width * 0.90,
+      sectionH: 112,
+      radius: 16,
+      cardAnchor: 'top',
+      scrollY: 300,
+    },
+    {
+      icon: '★',
+      title: 'Deals & promos',
+      body: 'Exclusive discounts from local mechanics, gas stations, and restaurants.',
+      cx: width * 0.50,
+      cy: height * 0.965,
+      sectionW: width * 0.19,
+      sectionH: TAB_BAR_H - 8,
+      radius: 12,
+      cardAnchor: 'top',
+    },
+  ];
+}
 
-const SPOT_SIZE = 72;
+interface Props {
+  /** Called when a tip requires a scroll position to bring the target into view */
+  onScrollRequest?: (y: number) => void;
+}
 
-export function OnboardingTooltips() {
+export function OnboardingTooltips({ onScrollRequest }: Props = {}) {
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
   const { width, height } = useWindowDimensions();
+
+  // Outer fade — native driver (opacity only)
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Glow pulse — JS driver (shadow props)
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  const tips = makeTips(width, height);
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_KEY).then((v) => {
       if (!v) {
         setVisible(true);
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-        startPulse();
+        startGlow();
       }
     });
-    return () => pulseLoop.current?.stop();
+    return () => glowLoopRef.current?.stop();
   }, []);
 
-  // Restart pulse when step changes
   useEffect(() => {
     if (!visible) return;
-    pulseAnim.setValue(1);
-    startPulse();
-    return () => pulseLoop.current?.stop();
+    glowAnim.setValue(0);
+    startGlow();
+    const tip = tips[step];
+    if (tip.scrollY !== undefined) onScrollRequest?.(tip.scrollY);
+    return () => glowLoopRef.current?.stop();
   }, [step, visible]);
 
-  function startPulse() {
-    pulseLoop.current?.stop();
-    pulseLoop.current = Animated.loop(
+  function startGlow() {
+    glowLoopRef.current?.stop();
+    glowLoopRef.current = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.25, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 1, duration: 950, useNativeDriver: false }),
+        Animated.timing(glowAnim, { toValue: 0.25, duration: 950, useNativeDriver: false }),
       ]),
     );
-    pulseLoop.current.start();
+    glowLoopRef.current.start();
   }
 
   const handleNext = () => {
-    if (step < TIPS.length - 1) {
+    if (step < tips.length - 1) {
       setStep(step + 1);
     } else {
       dismiss();
@@ -108,7 +140,7 @@ export function OnboardingTooltips() {
   };
 
   const dismiss = () => {
-    pulseLoop.current?.stop();
+    glowLoopRef.current?.stop();
     Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
       setVisible(false);
       AsyncStorage.setItem(ONBOARDING_KEY, 'true');
@@ -117,115 +149,180 @@ export function OnboardingTooltips() {
 
   if (!visible) return null;
 
-  const tip = TIPS[step];
-  const isLast = step === TIPS.length - 1;
+  const tip = tips[step];
+  const isLast = step === tips.length - 1;
 
-  // Spotlight centre in absolute pixels
-  const spotCX = tip.spotX * width;
-  const spotCY = tip.spotY * height;
+  // Section bounds in absolute pixels (from cx/cy absolute coords)
+  const secLeft = Math.max(0, tip.cx - tip.sectionW / 2);
+  const secTop = Math.max(0, tip.cy - tip.sectionH / 2);
+  const secRight = Math.min(width, secLeft + tip.sectionW);
+  const secBottom = Math.min(height, secTop + tip.sectionH);
+  const clampedSecW = secRight - secLeft;
+  const clampedSecH = secBottom - secTop;
 
-  // Card position: anchor top or bottom, keeping away from spotlight
+  // Tooltip card — stays in screen bounds, avoids highlighted section
   const cardMaxWidth = Math.min(width - 48, 340);
   const cardLeft = (width - cardMaxWidth) / 2;
+  const cardStyle =
+    tip.cardAnchor === 'top'
+      ? { top: 20, left: cardLeft, width: cardMaxWidth }
+      : { bottom: TAB_BAR_H + 12, left: cardLeft, width: cardMaxWidth };
 
-  const cardStyle = tip.cardAnchor === 'top'
-    ? { top: 60, left: cardLeft, width: cardMaxWidth }
-    : { bottom: 100, left: cardLeft, width: cardMaxWidth };
+  // Glow animation interpolations (JS thread — shadow props)
+  const glowShadowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.45, 1.0],
+  });
+  const glowShadowRadius = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [12, 34],
+  });
+  const glowBgOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.0, 0.12],
+  });
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFillObject, styles.overlay, { opacity: fadeAnim }]}>
-      {/* Dimmed backdrop */}
-      <Pressable style={StyleSheet.absoluteFillObject} onPress={dismiss}>
-        <View style={[StyleSheet.absoluteFillObject, styles.backdrop]} />
-      </Pressable>
+    <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
+      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fadeAnim }]}>
 
-      {/* Spotlight ring */}
-      <View
-        style={[
-          styles.spotlightWrap,
-          {
-            left: spotCX - SPOT_SIZE / 2,
-            top: spotCY - SPOT_SIZE / 2,
-            width: SPOT_SIZE,
-            height: SPOT_SIZE,
-          },
-        ]}
-        pointerEvents="none"
-      >
-        {/* Solid highlight circle */}
-        <View style={styles.spotlightInner} />
-        {/* Pulsing outer ring */}
+        {/* ── Dimmed backdrop — 4 rects surrounding the revealed section ── */}
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={dismiss}>
+          {/* Top */}
+          <View
+            style={[styles.dim, { top: 0, left: 0, width, height: secTop }]}
+          />
+          {/* Left */}
+          <View
+            style={[styles.dim, { top: secTop, left: 0, width: secLeft, height: clampedSecH }]}
+          />
+          {/* Right */}
+          <View
+            style={[
+              styles.dim,
+              { top: secTop, left: secRight, width: Math.max(0, width - secRight), height: clampedSecH },
+            ]}
+          />
+          {/* Bottom */}
+          <View
+            style={[
+              styles.dim,
+              { top: secBottom, left: 0, width, height: Math.max(0, height - secBottom) },
+            ]}
+          />
+        </Pressable>
+
+        {/* ── Glow fill — tinted overlay inside the section ── */}
         <Animated.View
+          pointerEvents="none"
           style={[
-            styles.spotlightRing,
-            { transform: [{ scale: pulseAnim }] },
+            styles.glowFill,
+            {
+              left: secLeft,
+              top: secTop,
+              width: clampedSecW,
+              height: clampedSecH,
+              borderRadius: tip.radius,
+              opacity: glowBgOpacity,
+            },
           ]}
         />
-      </View>
 
-      {/* Tooltip card */}
-      <View style={[styles.card, cardStyle]}>
-        {/* Progress dots */}
-        <View style={styles.dots}>
-          {TIPS.map((_, i) => (
-            <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
-          ))}
+        {/* ── Glow border ring — animated shadow + border ── */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.glowBorder,
+            {
+              left: secLeft,
+              top: secTop,
+              width: clampedSecW,
+              height: clampedSecH,
+              borderRadius: tip.radius,
+              shadowOpacity: glowShadowOpacity,
+              shadowRadius: glowShadowRadius,
+            },
+          ]}
+        />
+
+        {/* ── Outer halo ring (extra glow layer for depth) ── */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.glowHalo,
+            {
+              left: secLeft - 6,
+              top: secTop - 6,
+              width: clampedSecW + 12,
+              height: clampedSecH + 12,
+              borderRadius: tip.radius + 6,
+              opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.22] }),
+            },
+          ]}
+        />
+
+        {/* ── Tooltip card ── */}
+        <View style={[styles.card, cardStyle]}>
+          {/* Progress dots */}
+          <View style={styles.dots}>
+            {tips.map((_, i) => (
+              <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
+            ))}
+          </View>
+
+          {/* Icon */}
+          <View style={styles.iconCircle}>
+            <Text style={styles.iconText}>{tip.icon}</Text>
+          </View>
+
+          {/* Content */}
+          <Text style={styles.title}>{tip.title}</Text>
+          <Text style={styles.body}>{tip.body}</Text>
+
+          {/* Actions */}
+          <View style={styles.actions}>
+            <Pressable onPress={dismiss} hitSlop={8}>
+              <Text style={styles.skipText}>Skip</Text>
+            </Pressable>
+            <Pressable style={styles.nextBtn} onPress={handleNext}>
+              <Text style={styles.nextText}>{isLast ? 'Get started' : 'Next'}</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.counter}>
+            {step + 1} of {tips.length}
+          </Text>
         </View>
-
-        {/* Icon */}
-        <View style={styles.iconCircle}>
-          <Text style={styles.iconText}>{tip.icon}</Text>
-        </View>
-
-        {/* Content */}
-        <Text style={styles.title}>{tip.title}</Text>
-        <Text style={styles.body}>{tip.body}</Text>
-
-        {/* Actions */}
-        <View style={styles.actions}>
-          <Pressable onPress={dismiss} hitSlop={8}>
-            <Text style={styles.skipText}>Skip</Text>
-          </Pressable>
-          <Pressable style={styles.nextBtn} onPress={handleNext}>
-            <Text style={styles.nextText}>{isLast ? 'Get started' : 'Next'}</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.counter}>{step + 1} of {TIPS.length}</Text>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </Modal>
   );
 }
 
+const DIM_COLOR = 'rgba(0,0,0,0.82)';
+const GLOW_COLOR = appTheme.colors.playstationBlue;
+
 const styles = StyleSheet.create({
-  overlay: {
-    zIndex: 9999,
-  },
-  backdrop: {
-    backgroundColor: 'rgba(0,0,0,0.78)',
-  },
-  spotlightWrap: {
+  dim: {
     position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: DIM_COLOR,
   },
-  spotlightInner: {
+  glowFill: {
     position: 'absolute',
-    width: SPOT_SIZE,
-    height: SPOT_SIZE,
-    borderRadius: SPOT_SIZE / 2,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: GLOW_COLOR,
+  },
+  glowBorder: {
+    position: 'absolute',
     borderWidth: 2,
-    borderColor: appTheme.colors.playstationBlue,
+    borderColor: GLOW_COLOR,
+    backgroundColor: 'transparent',
+    shadowColor: GLOW_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    // shadowOpacity + shadowRadius are animated
   },
-  spotlightRing: {
+  glowHalo: {
     position: 'absolute',
-    width: SPOT_SIZE,
-    height: SPOT_SIZE,
-    borderRadius: SPOT_SIZE / 2,
-    borderWidth: 2,
-    borderColor: appTheme.colors.playstationBlue,
-    opacity: 0.5,
+    backgroundColor: GLOW_COLOR,
+    borderRadius: 20,
   },
   card: {
     position: 'absolute',

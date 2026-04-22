@@ -98,6 +98,17 @@ export type UserProfile = {
   vehicleMake?: string;
   vehicleModel?: string;
   vehicleYear?: number;
+  termsAccepted?: boolean;
+  termsAcceptedAt?: string;
+  termsVersion?: number;
+};
+
+export type DriverStreak = {
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: string | null; // ISO date string 'YYYY-MM-DD'
+  graceDaysUsed: number;
+  graceDaysMonth: number; // YYYYMM format
 };
 
 export type DealCategory = 'Mechanics' | 'Gas' | 'Insurance' | 'Restaurants' | 'Other';
@@ -140,10 +151,13 @@ export type AppState = {
   currentShift: ShiftSession | null;
   shifts: ShiftSession[];
   recurringAppliedMonths: string[];
+  streak: DriverStreak | null;
+  badges: string[];
 };
 
 export type RootStackParamList = {
   Auth: undefined;
+  Onboarding: undefined;
   Main: undefined;
   Settings: undefined;
   TaxReport: undefined;
@@ -156,6 +170,7 @@ export type RootStackParamList = {
     commentId?: string;
     contextTitle?: string;
   };
+  Legal: { doc: 'terms' | 'privacy' | 'community' };
 };
 
 export type Platform = 'Uber' | 'Lyft' | 'DoorDash' | 'Other';

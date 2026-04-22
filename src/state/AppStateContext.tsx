@@ -12,10 +12,12 @@ import {
   upsertProfile,
   setSyncErrorHandler,
 } from '../services/syncService';
+import { checkAndUpdateStreak } from '../services/streakService';
 import { initActivityTracking, setActivityUserId, stopActivityTracking } from '../services/activityService';
 import { audit, auditLogin, auditLogout, initAuditService, setAuditUserId, stopAuditService } from '../services/auditService';
 import {
   AppState,
+  DriverStreak,
   EarningsLog,
   ExpenseLog,
   ForumComment,
@@ -54,6 +56,8 @@ const emptyState: AppState = {
   currentShift: null,
   shifts: [],
   recurringAppliedMonths: [],
+  streak: null,
+  badges: [],
 };
 
 // Knowledge articles are static content — keep them bundled
@@ -160,6 +164,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
                   vehicleMake: (remote.profile.vehicle_make as string) || prev.profile.vehicleMake,
                   vehicleModel: (remote.profile.vehicle_model as string) || prev.profile.vehicleModel,
                   vehicleYear: (remote.profile.vehicle_year as number) || prev.profile.vehicleYear,
+                  termsAccepted: (remote.profile.terms_accepted as boolean) ?? false,
+                  termsAcceptedAt: (remote.profile.terms_accepted_at as string) ?? undefined,
+                  termsVersion: (remote.profile.terms_version as number) ?? 0,
                 }
               : prev.profile,
             // Remote always wins — empty arrays are correct for new users
@@ -174,6 +181,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             deals: remote.deals,
             posts: remote.posts,
             gas: remote.gas,
+            streak: remote.streak,
+            badges: remote.badges,
           }));
         }
       }
@@ -226,6 +235,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         ...prev.profile,
         email: email || prev.profile.email,
         name: name || prev.profile.name,
+        ...(remote?.profile
+          ? {
+              termsAccepted: (remote.profile.terms_accepted as boolean) ?? false,
+              termsAcceptedAt: (remote.profile.terms_accepted_at as string) ?? undefined,
+              termsVersion: (remote.profile.terms_version as number) ?? 0,
+            }
+          : {}),
       },
       ...(remote
         ? {
@@ -240,6 +256,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             deals: remote.deals,
             posts: remote.posts,
             gas: remote.gas,
+            streak: remote.streak,
+            badges: remote.badges,
           }
         : {}),
     }));
@@ -323,59 +341,79 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       // ── Mileage ─────────────────────────────────────────────────────────────
       addMileage: (input) => {
         const row = { id: makeId(), ...input };
-        setState((current) => ({ ...current, mileage: [row, ...current.mileage] }));
-        const uid = userIdRef.current;
-        if (uid) {
-          pushRow('mileage_logs', {
-            id: row.id, user_id: uid, date: row.date,
-            start_odo: row.start, end_odo: row.end, is_gig_work: row.isGigWork ?? true,
-          });
-          audit('create', 'mileage_logs', row.id);
-        }
+        setState((current) => {
+          const uid = userIdRef.current;
+          if (uid) {
+            pushRow('mileage_logs', {
+              id: row.id, user_id: uid, date: row.date,
+              start_odo: row.start, end_odo: row.end, is_gig_work: row.isGigWork ?? true,
+            });
+            audit('create', 'mileage_logs', row.id);
+            checkAndUpdateStreak(uid, current.streak).then((updated) =>
+              setState((s) => ({ ...s, streak: updated })),
+            );
+          }
+          return { ...current, mileage: [row, ...current.mileage] };
+        });
       },
 
       // ── Fuel ────────────────────────────────────────────────────────────────
       addFuel: (input) => {
         const row = { id: makeId(), ...input };
-        setState((current) => ({ ...current, fuel: [row, ...current.fuel] }));
-        const uid = userIdRef.current;
-        if (uid) {
-          pushRow('fuel_logs', {
-            id: row.id, user_id: uid, date: row.date,
-            litres: row.litres, cost: row.cost, odometer: row.odometer,
-            fuel_type: row.fuelType ?? 'Regular',
-          });
-          audit('create', 'fuel_logs', row.id);
-        }
+        setState((current) => {
+          const uid = userIdRef.current;
+          if (uid) {
+            pushRow('fuel_logs', {
+              id: row.id, user_id: uid, date: row.date,
+              litres: row.litres, cost: row.cost, odometer: row.odometer,
+              fuel_type: row.fuelType ?? 'Regular',
+            });
+            audit('create', 'fuel_logs', row.id);
+            checkAndUpdateStreak(uid, current.streak).then((updated) =>
+              setState((s) => ({ ...s, streak: updated })),
+            );
+          }
+          return { ...current, fuel: [row, ...current.fuel] };
+        });
       },
 
       // ── Expense ─────────────────────────────────────────────────────────────
       addExpense: (input) => {
         const row = { id: makeId(), ...input };
-        setState((current) => ({ ...current, expenses: [row, ...current.expenses] }));
-        const uid = userIdRef.current;
-        if (uid) {
-          pushRow('expense_logs', {
-            id: row.id, user_id: uid, date: row.date,
-            amount: row.amount, category: row.category, note: row.note ?? '',
-            receipt_url: row.receiptUri ?? '', hst_amount: row.hstAmount ?? 0,
-          });
-          audit('create', 'expense_logs', row.id);
-        }
+        setState((current) => {
+          const uid = userIdRef.current;
+          if (uid) {
+            pushRow('expense_logs', {
+              id: row.id, user_id: uid, date: row.date,
+              amount: row.amount, category: row.category, note: row.note ?? '',
+              receipt_url: row.receiptUri ?? '', hst_amount: row.hstAmount ?? 0,
+            });
+            audit('create', 'expense_logs', row.id);
+            checkAndUpdateStreak(uid, current.streak).then((updated) =>
+              setState((s) => ({ ...s, streak: updated })),
+            );
+          }
+          return { ...current, expenses: [row, ...current.expenses] };
+        });
       },
 
       // ── Earnings ────────────────────────────────────────────────────────────
       addEarnings: (input) => {
         const row = { id: makeId(), ...input };
-        setState((current) => ({ ...current, earnings: [row, ...current.earnings] }));
-        const uid = userIdRef.current;
-        if (uid) {
-          pushRow('earnings_logs', {
-            id: row.id, user_id: uid, date: row.date,
-            amount: row.amount, note: row.note ?? '', platform: row.platform ?? 'Uber',
-          });
-          audit('create', 'earnings_logs', row.id);
-        }
+        setState((current) => {
+          const uid = userIdRef.current;
+          if (uid) {
+            pushRow('earnings_logs', {
+              id: row.id, user_id: uid, date: row.date,
+              amount: row.amount, note: row.note ?? '', platform: row.platform ?? 'Uber',
+            });
+            audit('create', 'earnings_logs', row.id);
+            checkAndUpdateStreak(uid, current.streak).then((updated) =>
+              setState((s) => ({ ...s, streak: updated })),
+            );
+          }
+          return { ...current, earnings: [row, ...current.earnings] };
+        });
       },
 
       // ── Forum: Post ─────────────────────────────────────────────────────────
@@ -518,6 +556,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
           // Sync shift, mileage, and earnings
           if (uid) {
+            checkAndUpdateStreak(uid, current.streak).then((updated) =>
+              setState((s) => ({ ...s, streak: updated })),
+            );
+            // Award first_shift badge on first completed shift
+            if (current.shifts.length === 0 && !current.badges.includes('first_shift')) {
+              supabase.from('driver_badges').upsert(
+                { user_id: uid, badge_slug: 'first_shift' },
+                { onConflict: 'user_id,badge_slug' },
+              ).then(() => {
+                setState((s) => ({ ...s, badges: [...s.badges, 'first_shift'] }));
+              });
+            }
             pushRow('shifts', {
               id: completed.id, user_id: uid,
               start_time: completed.startTime, end_time: endTime,

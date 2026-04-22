@@ -6,6 +6,7 @@ import { FAB } from '../components/FAB';
 import { ModalField, TrackingModal } from '../components/TrackingModal';
 import { OnboardingTooltips } from '../components/OnboardingTooltips';
 import { ScreenFrame } from '../components/ScreenFrame';
+import { StreakWidget } from '../components/StreakWidget';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { useAppState } from '../state/AppStateContext';
 import { appTheme } from '../theme';
@@ -71,6 +72,9 @@ export function HomeScreen() {
             <Text style={styles.shiftChipText}>{isShiftActive ? 'End' : 'Start'}</Text>
           </View>
         </Pressable>
+
+        {/* Streak widget */}
+        <StreakWidget streak={state.streak} />
 
         {/* MetricsPanel — 2×2 stat grid */}
         <View style={styles.heroPanel}>

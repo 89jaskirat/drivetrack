@@ -1,5 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useCallback } from 'react';
 import { Text, View } from 'react-native';
 import { CarLoader } from '../components/CarLoader';
 import { CommunityScreen } from '../screens/CommunityScreen';
@@ -8,6 +9,8 @@ import { DealsScreen } from '../screens/DealsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { InviteScreen } from '../screens/InviteScreen';
 import { KnowledgeScreen } from '../screens/KnowledgeScreen';
+import { LegalScreen } from '../screens/LegalScreen';
+import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RepeatingExpensesScreen } from '../screens/RepeatingExpensesScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -64,7 +67,12 @@ function MainTabs() {
 }
 
 export function AppNavigator() {
-  const { state, ready } = useAppState();
+  const { state, ready, updateProfile } = useAppState();
+
+  // Called by OnboardingScreen when the user completes all steps
+  const handleOnboardingComplete = useCallback(() => {
+    updateProfile({ termsAccepted: true });
+  }, [updateProfile]);
 
   if (!ready) {
     return (
@@ -74,6 +82,9 @@ export function AppNavigator() {
     );
   }
 
+  // Show onboarding if signed in but T&C not yet accepted
+  const needsOnboarding = state.signedIn && !state.profile.termsAccepted;
+
   return (
     <Stack.Navigator
       screenOptions={{
@@ -81,7 +92,13 @@ export function AppNavigator() {
         contentStyle: { backgroundColor: appTheme.surface.screen },
       }}
     >
-      {state.signedIn ? (
+      {!state.signedIn ? (
+        <Stack.Screen name="Auth" component={AuthScreen} />
+      ) : needsOnboarding ? (
+        <Stack.Screen name="Onboarding">
+          {() => <OnboardingScreen onComplete={handleOnboardingComplete} />}
+        </Stack.Screen>
+      ) : (
         <>
           <Stack.Screen name="Main" component={MainTabs} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
@@ -90,9 +107,8 @@ export function AppNavigator() {
           <Stack.Screen name="Invite" component={InviteScreen} />
           <Stack.Screen name="Shift" component={ShiftScreen} />
           <Stack.Screen name="Compose" component={ComposeScreen} />
+          <Stack.Screen name="Legal" component={LegalScreen} />
         </>
-      ) : (
-        <Stack.Screen name="Auth" component={AuthScreen} />
       )}
     </Stack.Navigator>
   );

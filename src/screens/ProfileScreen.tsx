@@ -20,6 +20,15 @@ import { useAppState } from '../state/AppStateContext';
 import { appTheme } from '../theme';
 import { ChoiceRow } from './shared/ChoiceRow';
 
+const BADGE_CATALOG = [
+  { slug: 'first_shift',        icon: '🚀', name: 'First Shift',        desc: 'Completed your first shift' },
+  { slug: 'consistent_driver',  icon: '🔥', name: 'Consistent Driver',  desc: '7-day logging streak' },
+  { slug: 'clean_logs',         icon: '📋', name: 'Clean Logs',          desc: '30-day logging streak' },
+  { slug: 'fuel_saver',         icon: '⛽', name: 'Fuel Saver',          desc: 'Logged 10+ fuel fill-ups' },
+  { slug: 'century_km',         icon: '🛣️', name: 'Century Driver',      desc: 'Logged 1,000+ km total' },
+  { slug: 'big_earner',         icon: '💰', name: 'Big Earner',          desc: 'Logged $1,000+ in earnings' },
+];
+
 // NHTSA free API — no key required
 const NHTSA = 'https://vpic.nhtsa.dot.gov/api/vehicles';
 
@@ -330,6 +339,8 @@ export function ProfileScreen() {
           </>
         )}
 
+        <BadgeGrid earned={state.badges} />
+
         <SurfaceCard title="Reports">
           <NavRow
             icon="📊"
@@ -423,6 +434,26 @@ function NavRow({ icon, title, subtitle, onPress }: {
   );
 }
 
+function BadgeGrid({ earned }: { earned: string[] }) {
+  return (
+    <SurfaceCard title="Badges">
+      <View style={styles.badgeGrid}>
+        {BADGE_CATALOG.map((b) => {
+          const isEarned = earned.includes(b.slug);
+          return (
+            <View key={b.slug} style={[styles.badgeItem, !isEarned && styles.badgeItemPending]}>
+              <Text style={[styles.badgeIcon, !isEarned && styles.badgeIconPending]}>{b.icon}</Text>
+              <Text style={[styles.badgeName, !isEarned && styles.badgeTextPending]}>{b.name}</Text>
+              <Text style={[styles.badgeDesc, !isEarned && styles.badgeTextPending]}>{b.desc}</Text>
+              {!isEarned && <Text style={styles.badgeLock}>🔒</Text>}
+            </View>
+          );
+        })}
+      </View>
+    </SurfaceCard>
+  );
+}
+
 function EditField({ label, value, onChangeText, keyboardType }: {
   label: string;
   value: string;
@@ -513,6 +544,51 @@ const styles = StyleSheet.create({
   navTitle: { color: appTheme.colors.inverseWhite, ...appTheme.typography.body, fontWeight: '600' },
   navSubtitle: { color: appTheme.colors.bodyGray, ...appTheme.typography.caption, lineHeight: 18 },
   navChevron: { color: appTheme.colors.playstationBlue, fontSize: 16, fontWeight: '700' },
+  badgeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: appTheme.spacing.sm,
+  },
+  badgeItem: {
+    width: '30%',
+    flexGrow: 1,
+    backgroundColor: appTheme.surface.input,
+    borderRadius: appTheme.radii.card,
+    borderWidth: 1,
+    borderColor: appTheme.colors.playstationBlue + '66',
+    padding: appTheme.spacing.md,
+    alignItems: 'center',
+    gap: 4,
+  },
+  badgeItemPending: {
+    borderColor: appTheme.surface.border,
+    opacity: 0.5,
+  },
+  badgeIcon: {
+    fontSize: 26,
+  },
+  badgeIconPending: {
+    opacity: 0.5,
+  },
+  badgeName: {
+    color: appTheme.colors.inverseWhite,
+    ...appTheme.typography.caption,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  badgeDesc: {
+    color: appTheme.colors.bodyGray,
+    fontSize: 10,
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  badgeTextPending: {
+    color: appTheme.colors.bodyGray,
+  },
+  badgeLock: {
+    fontSize: 10,
+    marginTop: 2,
+  },
   editField: { gap: appTheme.spacing.sm },
   editLabel: {
     color: appTheme.colors.secondaryText,

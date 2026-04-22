@@ -1,6 +1,8 @@
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
 import { useAppState } from '../state/AppStateContext';
@@ -16,30 +18,65 @@ export function ShiftScreen() {
   const [odo, setOdo] = useState('');
   const [earnings, setEarnings] = useState('');
   const [photoTaken, setPhotoTaken] = useState(false);
-  const fileInputRef = useRef<any>(null);
+  const [scanning, setScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isStart = mode === 'start';
   const currentOdo = state.currentShift?.startOdo ?? 0;
 
-  function handlePhoto() {
+  async function handlePhoto() {
     if (Platform.OS === 'web') {
-      // On web: trigger a hidden file input
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      input.onchange = (e: any) => {
-        const file = e.target?.files?.[0];
-        if (file) {
-          // For the prototype we just acknowledge the photo was taken
-          setPhotoTaken(true);
-        }
-      };
-      input.click();
-    } else {
-      // Native: would use expo-camera — placeholder for now
-      setPhotoTaken(true);
+      fileInputRef.current?.click();
+      return;
     }
+
+    // Request camera permission
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      // Fall back to gallery if camera denied
+      const galleryResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        quality: 0.8,
+      });
+      if (!galleryResult.canceled && galleryResult.assets[0]) {
+        await runOCR(galleryResult.assets[0].uri);
+      }
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: 'images',
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      await runOCR(result.assets[0].uri);
+    }
+  }
+
+  async function runOCR(uri: string) {
+    setScanning(true);
+    setPhotoTaken(true);
+    try {
+      const result = await TextRecognition.recognize(uri);
+      // Find the largest number in recognized text — likely the odometer reading
+      const allNumbers = (result.text.match(/\d{4,7}/g) ?? []).map(Number);
+      if (allNumbers.length > 0) {
+        const best = allNumbers.reduce((a, b) => (b > a ? b : a), 0);
+        setOdo(String(best));
+      }
+    } catch (e) {
+      // OCR failed — user can type manually
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  function handleWebFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoTaken(true);
+    e.target.value = '';
   }
 
   function handleSubmit() {
@@ -55,6 +92,16 @@ export function ShiftScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {Platform.OS === 'web' && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleWebFileChange}
+        />
+      )}
+
       <View style={styles.header}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -66,7 +113,6 @@ export function ShiftScreen() {
       </View>
 
       <View style={styles.content}>
-        {/* Context */}
         {!isStart && state.currentShift && (
           <View style={styles.contextCard}>
             <Text style={styles.contextLabel}>Shift started</Text>
@@ -77,6 +123,25 @@ export function ShiftScreen() {
             <Text style={styles.contextValue}>{currentOdo.toLocaleString()} km</Text>
           </View>
         )}
+
+        {/* Camera / OCR button */}
+        <Pressable
+          onPress={handlePhoto}
+          disabled={scanning}
+          style={({ pressed }) => [styles.photoButton, photoTaken && styles.photoTaken, pressed && { opacity: 0.7 }]}
+        >
+          {scanning
+            ? <ActivityIndicator color={appTheme.colors.playstationBlue} />
+            : <Text style={styles.photoIcon}>{photoTaken ? '✓' : '📷'}</Text>}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.photoLabel}>
+              {scanning ? 'Reading odometer…' : photoTaken ? 'Photo captured' : 'Scan odometer with camera'}
+            </Text>
+            {!photoTaken && !scanning && (
+              <Text style={styles.photoHint}>Tap to open camera · reading auto-filled below</Text>
+            )}
+          </View>
+        </Pressable>
 
         {/* Odometer entry */}
         <View style={styles.section}>
@@ -91,20 +156,11 @@ export function ShiftScreen() {
             placeholderTextColor={appTheme.colors.bodyGray}
             style={styles.input}
           />
+          {photoTaken && odo ? (
+            <Text style={styles.ocrNote}>✓ Auto-filled from photo — edit if needed</Text>
+          ) : null}
         </View>
 
-        {/* Photo capture */}
-        <Pressable
-          onPress={handlePhoto}
-          style={({ pressed }) => [styles.photoButton, photoTaken && styles.photoTaken, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.photoIcon}>{photoTaken ? '✓' : '📷'}</Text>
-          <Text style={styles.photoLabel}>
-            {photoTaken ? 'Photo captured' : 'Take photo of odometer'}
-          </Text>
-        </Pressable>
-
-        {/* Earnings — end mode only */}
         {!isStart && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Shift earnings ($)</Text>
@@ -184,25 +240,6 @@ const styles = StyleSheet.create({
     ...appTheme.typography.displayS,
     marginTop: 2,
   },
-  section: {
-    gap: appTheme.spacing.sm,
-  },
-  sectionLabel: {
-    color: appTheme.colors.secondaryText,
-    ...appTheme.typography.caption,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: appTheme.surface.border,
-    borderRadius: appTheme.radii.input,
-    backgroundColor: appTheme.surface.input,
-    color: appTheme.colors.inverseWhite,
-    paddingHorizontal: appTheme.spacing.md,
-    paddingVertical: appTheme.spacing.md,
-    ...appTheme.typography.displayS,
-  },
   photoButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -222,5 +259,33 @@ const styles = StyleSheet.create({
   photoLabel: {
     color: appTheme.colors.secondaryText,
     ...appTheme.typography.body,
+  },
+  photoHint: {
+    color: appTheme.colors.bodyGray,
+    ...appTheme.typography.micro,
+    marginTop: 2,
+  },
+  section: {
+    gap: appTheme.spacing.sm,
+  },
+  sectionLabel: {
+    color: appTheme.colors.secondaryText,
+    ...appTheme.typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: appTheme.surface.border,
+    borderRadius: appTheme.radii.input,
+    backgroundColor: appTheme.surface.input,
+    color: appTheme.colors.inverseWhite,
+    paddingHorizontal: appTheme.spacing.md,
+    paddingVertical: appTheme.spacing.md,
+    ...appTheme.typography.displayS,
+  },
+  ocrNote: {
+    color: appTheme.colors.playstationBlue,
+    ...appTheme.typography.micro,
   },
 });
