@@ -222,19 +222,9 @@ See [docs/PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md) for details.
 
 For a breakdown of all third-party services, platform fees, and infrastructure costs, see [docs/PAID_SERVICES_BUDGET.md](docs/PAID_SERVICES_BUDGET.md).
 
-**Summary:**
-| Phase | One-Time | Monthly |
-|-------|----------|---------|
-| **Pre-launch** | $9k–$17k CAD | — |
-| **Launch (0–1k users)** | — | $50–$100 |
-| **Growth (1k–10k users)** | — | $350–$800 |
-| **Scale (10k+ users)** | — | $1.5k–$5.8k |
-
 ---
 
 ## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 **Development workflow:**
 1. Fork the repository
@@ -277,7 +267,6 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 - **Bug reports**: Open an issue on GitHub
 - **Feature requests**: Discuss in our community forum (in-app)
-- **Email support**: [support@drivetrackapp.ca](mailto:support@drivetrackapp.ca)
 - **Twitter**: [@DriveTrackApp](https://twitter.com/drivetrackapp)
 
 ---
@@ -292,7 +281,6 @@ DriveTrack is licensed under the [MIT License](LICENSE).
 
 - Built with [Expo](https://expo.dev/) and [React Native](https://reactnative.dev/)
 - Powered by [Supabase](https://supabase.com/)
-- Maps by [Google Maps Platform](https://developers.google.com/maps)
 - Icons by [Feather Icons](https://feathericons.com/)
 
 ---
@@ -302,9 +290,7 @@ DriveTrack is licensed under the [MIT License](LICENSE).
 **DriveTrack** started as a personal project to help Canadian gig drivers track profitability and optimize taxes. It's now a full-featured SaaS platform with a growing community of drivers.
 
 **Current team:**
-- Product & Engineering: Jaskirat (@yourusername)
-
-**Interested in collaborating?** Reach out via GitHub or email support@drivetrackapp.ca.
+- Product & Engineering: Jaskirat Singh
 
 ---
 
